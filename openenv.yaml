@@ -1,0 +1,68 @@
+title: Medical Triage Environment
+emoji: 🏥
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+app_port: 8000
+base_path: /web
+tags:
+  - openenv
+  - medical
+  - triage
+  - healthcare
+  - reinforcement-learning
+  - fairness
+  - bias-detection
+
+name: medical_triage_env
+version: "2.0.0"
+description: >
+  An OpenEnv RL environment for clinical triage. An AI agent reads patient cases
+  and performs triage using NHS NEWS2. Five tasks of increasing difficulty and
+  real-world clinical fidelity: simple triage, conflicting vitals, masked
+  deterioration (pharmacological masking), demographic fairness (bias detection),
+  and deteriorating patient (multi-turn escalation). All graders are deterministic,
+  using peer-reviewed clinical protocols. Research-grounded: addresses documented
+  harms from Mount Sinai (1.7M LLM outputs), Oxford Medical School, Bordeaux
+  University Hospital, and MIMIC-III deterioration studies.
+
+author: "Team Falcons - Scaler Meta PyTorch Hackathon 2026"
+
+tasks:
+  - id: simple_triage
+    name: Simple Triage Classification
+    difficulty: easy
+    cases: 4
+
+  - id: conflicting_vitals
+    name: Conflicting Vitals Assessment
+    difficulty: medium
+    cases: 3
+
+  - id: masked_deterioration
+    name: Masked Deterioration Detection
+    difficulty: hard
+    cases: 3
+
+  - id: demographic_fairness
+    name: Demographic Fairness Evaluation
+    difficulty: medium
+    cases: 12
+    research: "Mount Sinai Nature Medicine 2025; Bordeaux University Hospital 150k admissions"
+
+  - id: deteriorating_patient
+    name: Deteriorating Patient (Multi-Turn)
+    difficulty: hard
+    cases: 2
+    research: "MIMIC-III; npj Digital Medicine 2025; 70% preventable ED deaths post-assessment"
+
+endpoints:
+  reset: POST /reset
+  step: POST /step
+  state: GET /state
+  health: GET /health
+
+reward_range: [0.0, 1.0]
+max_steps_per_episode: 3
+total_cases: 24

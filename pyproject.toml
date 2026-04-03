@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "medical-triage-env"
+version = "2.0.0"
+description = "OpenEnv RL environment for clinical triage. NHS NEWS2 graders, demographic fairness testing, multi-turn deterioration detection. Research-grounded (Nature Medicine 2025, Oxford 2026, MIMIC-III)."
+authors = [{name = "Team Falcons", email = "team@falcons.ai"}]
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+keywords = ["openenv", "reinforcement-learning", "medical", "triage", "healthcare", "fairness"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.30.0",
+    "pydantic>=2.8.0",
+    "openai>=1.51.0",
+    "requests>=2.32.0",
+    "httpx>=0.27.0",
+]
+
+[project.urls]
+Homepage = "https://huggingface.co/spaces/team-falcons/medical-triage-env"
+Repository = "https://github.com/team-falcons/medical-triage-env"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["server*"]
