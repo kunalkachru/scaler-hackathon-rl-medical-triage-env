@@ -46,9 +46,9 @@ app = FastAPI(
     description=(
         "An OpenEnv RL environment for clinical triage. "
         "An AI agent reads patient cases and performs triage using NEWS2 and clinical reasoning. "
-        "Three tasks: simple triage, conflicting vitals, masked deterioration."
+        "Five tasks: simple triage, conflicting vitals, masked deterioration, demographic fairness, and deteriorating patient."
     ),
-    version="1.0.0",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -108,7 +108,7 @@ history = EpisodeHistory()
 @app.get("/health")
 async def health():
     """Health check endpoint. Must return 200 for HF Spaces deployment."""
-    return {"status": "healthy", "service": "medical-triage-env", "version": "1.0.0"}
+    return {"status": "healthy", "service": "medical-triage-env", "version": "2.0.0"}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -717,9 +717,9 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
         <div style="font-size:11px;color:var(--muted);margin:10px 0 6px;text-align:center">— or skip steps 2-3 and let the AI fill everything —</div>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="primary" style="flex:2" onclick="submitAction()">📋 Step 4: Submit & Score</button>
-          <button id="agent-btn" style="flex:1;background:#1e3a5f;border-color:#2a5080;color:#6ab0f5;font-weight:600" onclick="agentAssess()">🤖 Auto-fill with AI</button>
+          <button id="ai-btn" style="flex:1;background:#1e3a5f;border-color:#2a5080;color:#6ab0f5;font-weight:600" onclick="aiFill()">🤖 Auto-fill with AI</button>
         </div>
-        <div id="agent-status" style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center"></div>
+        <div id="ai-status" style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center"></div>
       </div>
 
       <div id="result-section"></div>
@@ -792,8 +792,37 @@ function updateTaskInfo() {
   const info = TASK_INFO[tid] || {};
   document.getElementById("task-info-text").textContent = info.desc || "";
 }
-document.getElementById("task-select").addEventListener("change", updateTaskInfo);
-updateTaskInfo();
+
+async function populateCaseSelect() {
+  const taskId = document.getElementById("task-select").value;
+  const caseSelect = document.getElementById("case-select");
+  caseSelect.innerHTML = '<option value="">Random case</option>';
+
+  try {
+    const resp = await fetch('/tasks');
+    if (!resp.ok) return;
+    const payload = await resp.json();
+    const taskData = payload[taskId] || {};
+    const caseIds = taskData.case_ids || [];
+
+    caseIds.forEach((caseId, idx) => {
+      const opt = document.createElement('option');
+      opt.value = String(idx);
+      opt.textContent = `${caseId} (index ${idx})`;
+      caseSelect.appendChild(opt);
+    });
+  } catch (_) {
+    // Keep Random case option if /tasks is unavailable.
+  }
+}
+
+async function onTaskSelectionChange() {
+  updateTaskInfo();
+  await populateCaseSelect();
+}
+
+document.getElementById("task-select").addEventListener("change", onTaskSelectionChange);
+onTaskSelectionChange();
 
 async function resetEnv() {
   const tid = document.getElementById("task-select").value;
@@ -979,50 +1008,8 @@ function renderResult(obs, reward, done, info) {
 }
 
 async function agentAssess() {
-  if (!state.task_id) { alert('Click New Patient Case first'); return; }
-  const btn = document.getElementById('agent-btn');
-  const status = document.getElementById('agent-status');
-  const history = document.getElementById('patient-history').textContent;
-  const taskDesc = document.getElementById('task-info-text').textContent;
-
-  btn.textContent = '⏳ Thinking...';
-  btn.disabled = true;
-  status.textContent = 'Calling LLM agent...';
-
-  try {
-    const r = await fetch('/agent-assess', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({patient_history: history, task_id: state.task_id, task_description: taskDesc})
-    });
-    const d = await r.json();
-    const a = d.action || {};
-
-    // Populate form fields from LLM response
-    const set = (id, val) => { const el=document.getElementById(id); if(el && val!==undefined && val!==null) el.value=val; };
-    set('f-priority', a.priority || a.action || '');
-    set('f-news2',    a.news2_score);
-    set('f-sign',     a.critical_sign);
-    set('f-action',   a.recommended_action);
-    set('f-rationale',a.rationale || '');
-    set('f-confidence', a.confidence || 0.7);
-    if (a.masking_drug_or_condition) set('f-masking', a.masking_drug_or_condition);
-    if (a.masked_sign)               set('f-masked-sign', a.masked_sign);
-    if (a.critical_clues)            set('f-clues', Array.isArray(a.critical_clues) ? a.critical_clues.join(', ') : a.critical_clues);
-    if (a.misleading_signs)          set('f-misleading', Array.isArray(a.misleading_signs) ? a.misleading_signs.join(', ') : a.misleading_signs);
-
-    // For deteriorating_patient the action is the main field
-    if (state.task_id === 'deteriorating_patient' && a.action) setAction(a.action);
-
-    const modelName = (d.model || 'LLM').split('/').pop();
-    status.textContent = 'Filled by ' + modelName + (d.note ? ' (mock — no API key)' : '');
-    log('Agent (' + modelName + ') assessed: priority=' + (a.priority||a.action||'?'));
-  } catch(e) {
-    status.textContent = 'Error: ' + e.message;
-  } finally {
-    btn.textContent = '🤖 AI Agent';
-    btn.disabled = false;
-  }
+  // Backward-compatible alias used by older docs/snippets.
+  return aiFill();
 }
 
 async function aiFill() {
@@ -1072,7 +1059,7 @@ async function aiFill() {
     status.textContent = "AI fill failed: " + e.message;
     status.style.color = "#e05c5c";
   } finally {
-    btn.textContent = "🤖 AI Fill";
+    btn.textContent = "🤖 Auto-fill with AI";
     btn.disabled = false;
   }
 }
@@ -1461,5 +1448,10 @@ function autoParseVitals(text) {
 # Entry point
 # ─────────────────────────────────────────────────────────────
 # uvicorn.run(app, host="0.0.0.0", port=8000)
-if __name__ == "__main__":
+def main() -> None:
+    """CLI entrypoint required by OpenEnv validator."""
     uvicorn.run(app, host="0.0.0.0", port=7860)
+
+
+if __name__ == "__main__":
+    main()

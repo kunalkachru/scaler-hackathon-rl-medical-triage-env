@@ -77,10 +77,22 @@ class TriageAction(BaseModel):
         description="Non-standard clues that reveal true severity (e.g. 'lactate', 'urine_output_reduced')"
     )
 
+    # Task 5 specific (multi-turn deteriorating patient)
+    action: Optional[str] = Field(
+        default=None,
+        description="Decision for dynamic triage: 'monitor' | 'escalate' | 'emergency_response'"
+    )
+
     # Optional free-text rationale (used in Task 2 grader)
     rationale: Optional[str] = Field(
         default=None,
         description="Agent's clinical reasoning and explanation"
+    )
+    confidence: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Optional confidence score in [0.0, 1.0] used for calibration bonus"
     )
 
     model_config = ConfigDict(json_schema_extra={
@@ -116,7 +128,7 @@ class TriageObservation(BaseModel):
     )
     task_id: str = Field(
         default="",
-        description="Current task: 'simple_triage' | 'conflicting_vitals' | 'masked_deterioration'"
+        description="Current task ID (one of all supported tasks in CASE_BANK)"
     )
     task_description: str = Field(
         default="",
@@ -243,7 +255,7 @@ class ResetRequest(BaseModel):
     """Request body for POST /reset"""
     task_id: Optional[str] = Field(
         default=None,
-        description="Task to start: 'simple_triage' | 'conflicting_vitals' | 'masked_deterioration'. Random if None."
+        description="Task to start. If omitted, a random task is selected."
     )
     case_index: Optional[int] = Field(
         default=None,

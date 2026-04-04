@@ -9,3 +9,6 @@ __pycache__/
 .DS_Store
 .env
 *.log
+
+# Local-only internal engineering notes (optional for submission)
+docs/LOW_LEVEL_DESIGN.md

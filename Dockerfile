@@ -6,7 +6,7 @@
 #   - WORKDIR /app → standard convention, matches uvicorn CMD
 #   - No GPU required → all graders are pure Python logic
 #   - HEALTHCHECK → required by HF Spaces automated validation
-#   - app_port=8000 matches openenv.yaml
+#   - app_port=7860 matches openenv.yaml
 # ─────────────────────────────────────────────────────────────
 
 FROM python:3.12-slim
@@ -33,7 +33,7 @@ COPY server/ /app/server/
 
 # Health check — HF Spaces pings /health every 30s
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:7860/health || exit 1
 
 # Expose port declared in openenv.yaml
 EXPOSE 7860

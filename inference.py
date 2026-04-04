@@ -15,17 +15,17 @@ import json
 import time
 import re
 import subprocess
-import signal
 
 import requests as req
 from openai import OpenAI
 
 # ── MANDATORY: read from environment variables ───────────────
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
-API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY", "")
-MODEL_NAME   = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+API_BASE_URL = os.getenv("API_BASE_URL", "")
+API_KEY      = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY", "")
+MODEL_NAME   = os.getenv("MODEL_NAME", "")
 SERVER_URL   = os.getenv("SERVER_URL", "http://localhost:8000")
 MAX_EPISODE_STEPS = 5   # Safety cap for multi-turn episodes
+TEMPERATURE = 0.0
 
 # ── System prompt — clinical triage agent ───────────────────
 SYSTEM_PROMPT = """You are an expert clinical triage nurse. You ALWAYS respond with a single valid JSON object.
@@ -85,7 +85,7 @@ def call_llm(client: OpenAI, patient_history: str, task_description: str,
                     f"PATIENT CASE:\n{patient_history}"
                 )}
             ],
-            temperature=0.1,
+            temperature=TEMPERATURE,
             max_tokens=600,
             timeout=30,
         )
@@ -180,7 +180,26 @@ def wait_for_server(url: str, retries: int = 30) -> bool:
     return False
 
 
+def _validate_required_env() -> list[str]:
+    missing = []
+    if not API_BASE_URL:
+        missing.append("API_BASE_URL")
+    if not MODEL_NAME:
+        missing.append("MODEL_NAME")
+    if not API_KEY:
+        missing.append("HF_TOKEN (or OPENAI_API_KEY/API_KEY)")
+    return missing
+
+
 def main():
+    missing = _validate_required_env()
+    if missing:
+        print("Missing required environment variables:")
+        for name in missing:
+            print(f"  - {name}")
+        print("Set the required variables and re-run inference.py")
+        sys.exit(1)
+
     print("=" * 60)
     print("  Medical Triage Environment v2.0 — Baseline Inference")
     print(f"  Model: {MODEL_NAME}")
@@ -202,7 +221,7 @@ def main():
         print("ready\n")
 
     # ── MANDATORY: Use OpenAI client ─────────────────────────
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY or "dummy")
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
     # ── Run 2 cases per task ─────────────────────────────────
     TASKS = [

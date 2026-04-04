@@ -15,6 +15,9 @@ An RL environment where an AI agent performs clinical triage on patient cases us
 
 All graders are **fully deterministic**, using the NHS NEWS2 (National Early Warning Score 2) protocol — a real, peer-reviewed clinical standard used in hospitals worldwide.
 
+For complete evaluator-facing and execution documentation (architecture, setup, deployment, UI testing steps, and validation), see:
+- [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
+
 ---
 
 ## Why This Environment?
@@ -49,11 +52,13 @@ uvicorn server.app:app --host 0.0.0.0 --port 8000
 open http://localhost:8000/web
 ```
 
+Note: local examples use port `8000`; Docker/HF runtime uses port `7860`.
+
 ### Docker
 
 ```bash
 docker build -t medical-triage-env:latest .
-docker run -p 8000:8000 medical-triage-env:latest
+docker run -p 7860:7860 medical-triage-env:latest
 ```
 
 ### Using the Python Client
@@ -84,7 +89,7 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 
 ---
 
-## The Three Tasks
+## Core Tasks
 
 ### Task 1 — Simple Triage (Easy)
 
@@ -178,8 +183,12 @@ class TriageAction(BaseModel):
     masked_sign: Optional[str]             # pharmacologically suppressed vital sign
     critical_clues: Optional[list[str]]    # non-vital-sign evidence of true severity
 
+    # Task 5
+    action: Optional[str]                  # "monitor" | "escalate" | "emergency_response"
+
     # Optional for all
-    rationale: Optional[str]              # free-text clinical reasoning
+    rationale: Optional[str]               # free-text clinical reasoning
+    confidence: Optional[float]            # confidence in [0.0, 1.0]
 ```
 
 ---
@@ -249,7 +258,7 @@ Task 3 (Masked Deterioration):
 ## Running Tests
 
 ```bash
-# All 54 tests
+# All tests
 venv/bin/python -m pytest tests/ -v
 
 # Just grader unit tests
@@ -259,7 +268,13 @@ venv/bin/python -m pytest tests/test_graders.py -v
 venv/bin/python -m pytest tests/test_environment.py -v
 ```
 
-**Test results:** 54/54 pass. See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for exhaustive documentation of every test case with inputs, expected outputs, and actual results.
+**Current status:** 99 tests passing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+
+Run pre-submit validator:
+
+```bash
+./scripts/pre_submit_check.sh
+```
 
 ---
 
@@ -267,7 +282,7 @@ venv/bin/python -m pytest tests/test_environment.py -v
 
 ```bash
 # Set environment variables
-export API_BASE_URL="https://api-inference.huggingface.co/v1"
+export API_BASE_URL="https://router.huggingface.co/v1"
 export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
 export HF_TOKEN="your-token-here"
 
@@ -277,17 +292,21 @@ python inference.py
 
 The script:
 1. Starts the FastAPI server as a subprocess
-2. Runs the LLM agent against 2 cases per task (6 total)
+2. Runs the LLM agent against 2 cases per task (10 total)
 3. Scores each response using our graders
 4. Prints a reproducible score report
 
-**Baseline scores (Llama-3.1-8B-Instruct, seed=42):**
+**Sample baseline scores (Llama-3.1-8B-Instruct, seed=42):**
 
 | Task | Difficulty | Baseline Score |
 |---|---|---|
-| Simple Triage | Easy | ~0.72 |
-| Conflicting Vitals | Medium | ~0.45 |
-| Masked Deterioration | Hard | ~0.18 |
+| Simple Triage | Easy | ~0.88 |
+| Conflicting Vitals | Medium | ~0.27 |
+| Masked Deterioration | Hard | ~0.53 |
+| Demographic Fairness | Medium | ~0.73 |
+| Deteriorating Patient | Hard | ~0.75 |
+
+These are representative outputs from one validated run. Scores may vary across providers, model revisions, and token routing behavior.
 
 ---
 
@@ -322,16 +341,18 @@ medical_triage_env/
 ├── server/
 │   ├── app.py                ← FastAPI server with all endpoints
 │   ├── medical_triage_environment.py  ← Core environment logic
-│   ├── cases.py              ← Patient case bank (10 cases across 3 tasks)
+│   ├── cases.py              ← Patient case bank (24 cases across 5 tasks)
 │   ├── graders.py            ← Deterministic NEWS2-based graders
 │   ├── requirements.txt      ← Server dependencies
 │   └── __init__.py
 ├── tests/
-│   ├── test_graders.py       ← 30 grader unit tests
-│   └── test_environment.py   ← 24 environment integration tests
+│   ├── test_graders.py       ← grader unit tests
+│   ├── test_environment.py   ← environment integration tests
+│   └── test_v2_enhancements.py ← v2 feature and task coverage tests
 └── docs/
-    ├── TEST_REPORT.md        ← Exhaustive test documentation
-    └── README.md             ← This file
+    ├── PROJECT_DOCUMENTATION.md ← Evaluator-facing end-to-end documentation
+    ├── LOW_LEVEL_DESIGN.md   ← File/symbol-level design mapping
+    └── TEST_REPORT.md        ← Exhaustive test documentation
 ```
 
 ---
@@ -407,3 +428,17 @@ BSD 3-Clause (same as OpenEnv)
 | Demographic Fairness | 12 (3×4) | Medium | Nature Medicine 2025, Lancet Digital Health 2024 |
 | Deteriorating Patient | 2 (3-step) | Hard | MIMIC-III, npj Digital Medicine 2025 |
 | **Total** | **24** | | |
+
+---
+
+## Recommended Submission Docs
+
+For hackathon evaluation, the minimum high-signal docs set is:
+- `README.md` (required, public entrypoint)
+- `docs/PROJECT_DOCUMENTATION.md` (evaluator runbook + validation flow)
+
+Optional supporting appendix:
+- `docs/TEST_REPORT.md` (deep test narrative and evidence)
+
+Internal engineering reference (optional to keep local):
+- `docs/LOW_LEVEL_DESIGN.md`

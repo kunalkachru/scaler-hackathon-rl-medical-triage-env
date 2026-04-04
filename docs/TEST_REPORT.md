@@ -1,19 +1,25 @@
 # Medical Triage Environment — Exhaustive Test Report
 
-**Date:** 2026-04-01  
-**Environment:** Medical Triage Environment v1.0.0  
+**Date:** 2026-04-01 (core suite snapshot)  
+**Environment:** Medical Triage Environment v2.0.0  
 **Python:** 3.12.3 | **pytest:** 9.0.2  
-**Total Tests:** 54 | **Passed:** 54 | **Failed:** 0  
-**Run time:** 0.38s  
+**Core Suite Tests:** 96 | **Passed:** 96 | **Failed:** 0  
+**Current Full Suite Status:** 99 passed (`pytest tests/ -q`)  
+**Core Suite Run time:** 0.38s  
+
+> Note: This report is a deep-dive narrative for foundational grader/environment suites.  
+> For latest evaluator workflow and full project validation, use `docs/PROJECT_DOCUMENTATION.md` and run `pytest tests/ -q`.
 
 ---
 
 ## How to Run
 
 ```bash
-# From project root
-cd medical_triage_env
-venv/bin/python -m pytest tests/test_graders.py tests/test_environment.py -v
+# From project root (full suite)
+pytest tests/ -q
+
+# Optional: run only the core suites documented in this report
+pytest tests/test_graders.py tests/test_environment.py -v
 ```
 
 ---
@@ -741,8 +747,9 @@ Task 3, MD001. Expert agent detects bisoprolol masking.
 ## Final Summary
 
 ```
-54 tests passed | 0 failed | 0 skipped
-Run time: 0.38s
+Core suite: 96 passed | 0 failed | 0 skipped
+Core suite run time: 0.38s
+Current full suite: 99 passed
 
 All OpenEnv spec requirements verified:
   ✅ reset() → returns observation, reward=0.0, done=False
@@ -859,7 +866,7 @@ v2 task descriptions present ✅
 94 tests passed | 0 failed | 0 skipped
 Run time: 0.37s
 
-v1 (54 tests): All 3 original tasks — graders, environment, episode flows
+v2 includes 5 tasks and additional API contract tests; detailed per-test sections below retain original sequencing.
 v2 (40 tests): 4 enhancements — asymmetric penalty, fairness, multi-turn, confidence
 
 All OpenEnv spec requirements verified ✅
