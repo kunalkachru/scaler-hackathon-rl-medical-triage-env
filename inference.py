@@ -97,16 +97,19 @@ def call_llm(client: OpenAI, patient_history: str, task_description: str,
 
 
 def run_episode(client: OpenAI, task_id: str, case_index: int,
-                server_url: str) -> tuple[float, list[float]]:
+                server_url: str) -> tuple[float, list[float], dict]:
     """
     Run a complete episode — handles BOTH single-step and multi-turn tasks.
 
     For single-step tasks: reset → step → done (1 call)
     For deteriorating_patient: reset → step → step → step until done=True
 
-    Returns (final_reward, all_step_rewards)
+    Uses session_id from reset() to ensure step() targets the correct episode
+    (required for correct behaviour when multiple agents run concurrently).
+
+    Returns (final_reward, all_step_rewards, last_action_dict)
     """
-    # Reset
+    # Reset — always creates a fresh session
     try:
         reset_resp = req.post(
             f"{server_url}/reset",
@@ -117,7 +120,10 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
         reset_data = reset_resp.json()
     except Exception as e:
         print(f"  [Reset error: {e}]")
-        return 0.0, []
+        return 0.0, [], {}
+
+    # Capture session_id so step() hits the correct episode
+    session_id = reset_data.get("info", {}).get("session_id")
 
     obs = reset_data["observation"]
     patient_history = obs.get("patient_history", "")
@@ -125,6 +131,7 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
 
     step_rewards = []
     last_reward = 0.0
+    last_action_dict: dict = {}
 
     # ── CRITICAL: loop until done=True (handles multi-turn episodes) ──
     step_count = 0
@@ -138,11 +145,15 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
             # Empty response — submit minimal to get partial feedback
             action_dict = {"priority": "medium", "action": "monitor"}
 
-        # Submit step
+        # Submit step — include session_id for correct episode routing
+        step_payload = {"action": action_dict}
+        if session_id:
+            step_payload["session_id"] = session_id
+
         try:
             step_resp = req.post(
                 f"{server_url}/step",
-                json={"action": action_dict},
+                json=step_payload,
                 timeout=15
             )
             step_resp.raise_for_status()
@@ -156,6 +167,7 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
         obs = step_data["observation"]
         step_rewards.append(reward)
         last_reward = reward
+        last_action_dict = action_dict   # track for fairness parity scoring
         step_count += 1
 
         # For multi-turn: the next patient_history is the updated observation
@@ -166,7 +178,7 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
             feedback = obs.get("feedback", "")
             print(f"    step {step_count}: action={action_dict.get('action','?')!r:12} reward={reward:.3f}  {feedback[:50]}")
 
-    return last_reward, step_rewards
+    return last_reward, step_rewards, last_action_dict
 
 
 def wait_for_server(url: str, retries: int = 30) -> bool:
@@ -236,27 +248,67 @@ def main():
     total_cases = 0
     total_score = 0.0
 
+    # Collect fairness responses per group for multi-variant parity scoring
+    # Maps group_prefix → {case_id: action_dict}
+    fairness_responses: dict[str, dict] = {}
+
     for task_id, difficulty, case_indices in TASKS:
         print(f"  [{difficulty}] {task_id}")
         task_scores = []
 
         for ci in case_indices:
-            reward, steps = run_episode(client, task_id, ci, SERVER_URL)
+            reward, _, action_dict = run_episode(client, task_id, ci, SERVER_URL)
             task_scores.append(reward)
             total_score += reward
             total_cases += 1
 
+            from server.cases import CASE_BANK
+            try:
+                case = CASE_BANK[task_id][ci]
+                case_id = case["case_id"]
+            except Exception:
+                case_id = f"case_{ci}"
+                case = {}
+
+            # Collect action for fairness parity scoring
+            if task_id == "demographic_fairness" and case and action_dict:
+                # group_id is the first 5 chars of case_id (e.g. "FP001")
+                group_id = case_id[:5]
+                if group_id not in fairness_responses:
+                    fairness_responses[group_id] = {}
+                fairness_responses[group_id][case_id] = action_dict
+
             if task_id != "deteriorating_patient":
-                # Single-step tasks: print one line
-                from server.cases import CASE_BANK
-                try:
-                    case_id = CASE_BANK[task_id][ci]["case_id"]
-                except Exception:
-                    case_id = f"case_{ci}"
                 print(f"    {case_id}: {reward:.3f}")
 
         task_avg = sum(task_scores) / len(task_scores)
         all_results[task_id] = {"avg": task_avg, "scores": task_scores}
+        print()
+
+    # ── Demographic fairness: multi-variant parity scoring ────────
+    if fairness_responses:
+        print("  [Fairness] Running multi-variant parity check...")
+        parity_scores = []
+        for group_id, responses in fairness_responses.items():
+            if len(responses) < 2:
+                continue   # Need ≥2 variants to measure parity
+            try:
+                pr = req.post(
+                    f"{SERVER_URL}/grade-fairness",
+                    json={"group_id": group_id, "responses": responses},
+                    timeout=10
+                )
+                if pr.status_code == 200:
+                    pd_data = pr.json()
+                    parity_score = pd_data.get("score", 0.0)
+                    parity_scores.append(parity_score)
+                    print(f"    {group_id}: parity={parity_score:.3f}  breakdown={pd_data.get('breakdown', {})}")
+            except Exception as e:
+                print(f"    [{group_id} parity error: {e}]")
+        if parity_scores:
+            avg_parity = sum(parity_scores) / len(parity_scores)
+            all_results["demographic_fairness"]["parity_avg"] = round(avg_parity, 3)
+            print(f"    Average parity score: {avg_parity:.3f}")
         print()
 
     # ── Summary ──────────────────────────────────────────────

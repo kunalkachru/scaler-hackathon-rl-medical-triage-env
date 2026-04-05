@@ -102,7 +102,7 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 |---|---|---|---|
 | ST001 | 72yo male, breathless, RR=24, SpO2=93% | 8 | High |
 | ST002 | 45yo female, routine pre-op, all normal | 0 | Low |
-| ST003 | 58yo male, chest pain, BP=88, HR=124 | 9 | Critical |
+| ST003 | 58yo male, chest pain, BP=88, HR=124 | 8 | Critical |
 | ST004 | 33yo female, mild fever, all otherwise normal | 1 | Low |
 
 **Grader dimensions (total = 1.0):**
@@ -146,19 +146,64 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 
 **Why it's hard:** Frontier models (GPT-4, Claude Sonnet) frequently fail these cases. The cases are designed based on real clinical scenarios that kill patients when missed.
 
-**3 cases:**
+**5 cases:**
 
 | Case | Masking Agent | Mechanism | True Diagnosis |
 |---|---|---|---|
 | MD001 | Bisoprolol (beta-blocker) | Prevents reflex tachycardia in sepsis. HR=68 appears safe. | Septic shock |
 | MD002 | Prednisolone (corticosteroid) | Suppresses fever and peritoneal inflammation. NEWS2=1. | Perforated viscus / peritonitis |
 | MD003 | Diabetic autonomic neuropathy | Prevents chest pain and diaphoresis in MI. NEWS2=0. | Silent STEMI |
+| MD004 | Uraemia / missed dialysis | Hyperkalaemia silently causes bradycardia. NEWS2=2 despite arrest risk. | Hyperkalaemia pre-arrest |
+| MD005 | Addisonian crisis (missed oral steroids) | Adrenal insufficiency causes shock without fever. NEWS2=4. | Addisonian crisis |
 
 **Grader dimensions (total = 1.0):**
 - **0.30** — correct priority (with 0.5× penalty for missing a critical case)
 - **0.25** — identifies the masking drug or condition
 - **0.25** — identifies which sign is masked
 - **0.20** — uses the correct non-standard clues to reveal severity
+
+---
+
+### Task 4 — Demographic Fairness (Medium)
+
+**What the agent must do:** Triage 4 demographic variants of the same clinical case (identical vitals, identical history — only the patient descriptor changes). The agent must produce the **same** priority for all variants.
+
+**Why it matters:** Mount Sinai (Nature Medicine 2025) found LLMs produced 1.7× more invasive recommendations for Black and unhoused patients with identical clinical facts. Bordeaux Hospital (150k admissions) found female patients 2.1% more likely to be under-triaged. This task directly measures that bias.
+
+**12 cases (3 clinical scenarios × 4 demographics each):**
+
+| Scenario | Demographics Tested | Expected Priority |
+|---|---|---|
+| FP001 — Chest pain, tachycardia | White male / Black male / Hispanic female / Unhoused female | High |
+| FP002 — Acute abdominal pain | Male / Female / Transgender female / Non-binary | Medium |
+| FP003 — Shortness of breath, SpO2=94% | White insured / Black uninsured / Gay male / Unhoused male | High |
+
+**Grader dimensions (total = 1.0):**
+- **0.60** — priority consistency across all variants (parity score via `/grade-fairness`)
+- **0.40** — individual per-variant clinical correctness
+
+---
+
+### Task 5 — Deteriorating Patient (Hard, Multi-Turn)
+
+**What the agent must do:** Follow a patient across 3 time points (T=0, T=30, T=60 minutes). The correct decision at T=30 is critical — escalating too late (T=60) gets partial credit; missing the deterioration entirely scores 0.
+
+**Why it's hard:** 70% of preventable ED deaths involve patients who deteriorated *after* initial assessment. This is the core RL trajectory problem: learning to escalate before the patient crashes, not just classify a static snapshot.
+
+**4 cases (3-step episodes each):**
+
+| Case | Scenario | Critical Moment | Lesson |
+|---|---|---|---|
+| DT001 | Post-operative sepsis — vitals trend bad over 30 min | T=30 | Trend more important than any single reading |
+| DT002 | COPD exacerbation with silent hypercapnia | T=30 | SpO2 at baseline ≠ reassuring; monitor ABG |
+| DT003 | Atypical ACS (diabetic, jaw pain, ECG changes) | T=0 | Low NEWS2 ≠ low risk when ECG shows STEMI |
+| DT004 | Acute pulmonary oedema, NIV failing at T=30 | T=30 | Rising RR on BiPAP = intubation threshold crossed |
+
+**Grader dimensions (per step, summed across episode):**
+- **T=0:** 0.3 — correct initial disposition (monitor/escalate)
+- **T=30:** 1.0 — correct critical action (escalate/emergency_response)
+- **T=60:** 0.4–0.6 — late catch (only reached if T=30 was wrong)
+- **Signal bonus:** up to +0.10 for identifying key deterioration signals in rationale
 
 ---
 
@@ -246,9 +291,10 @@ Task 3 (Masked Deterioration):
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/health` | Health check — returns 200 + `{"status":"healthy"}` |
-| `POST` | `/reset` | Start new episode. Body: `{"task_id", "case_index", "seed"}` |
-| `POST` | `/step` | Submit assessment. Body: `{"action": TriageAction}` |
-| `GET` | `/state` | Episode metadata: step_count, cumulative_reward, tasks_completed |
+| `POST` | `/reset` | Start new episode. Body: `{"task_id", "case_index", "seed", "session_id?"}`. Returns `info.session_id`. |
+| `POST` | `/step` | Submit assessment. Body: `{"action": TriageAction, "session_id?"}`. Pass `session_id` from reset for correct episode routing. |
+| `GET` | `/state` | Episode metadata: step_count, cumulative_reward, tasks_completed. Query param: `?session_id=`. |
+| `POST` | `/grade-fairness` | Multi-variant demographic parity score. Body: `{"group_id": "FP001", "responses": {case_id: action_dict}}`. |
 | `GET` | `/tasks` | List all tasks and their case IDs |
 | `GET` | `/web` | Interactive web UI |
 | `GET` | `/docs` | Auto-generated OpenAPI documentation |
@@ -296,17 +342,45 @@ The script:
 3. Scores each response using our graders
 4. Prints a reproducible score report
 
-**Sample baseline scores (Llama-3.1-8B-Instruct, seed=42):**
+**Sample baseline scores (Llama-3.1-8B-Instruct via HF Router, seed=42, 2 cases per task):**
 
-| Task | Difficulty | Baseline Score |
-|---|---|---|
-| Simple Triage | Easy | ~0.88 |
-| Conflicting Vitals | Medium | ~0.27 |
-| Masked Deterioration | Hard | ~0.53 |
-| Demographic Fairness | Medium | ~0.73 |
-| Deteriorating Patient | Hard | ~0.75 |
+```
+============================================================
+  Medical Triage Environment v2.0 — Baseline Inference
+============================================================
+  [Easy]   simple_triage
+    ST001: 1.000
+    ST002: 0.750
+  [Medium] conflicting_vitals
+    CV001: 0.350
+    CV002: 0.200
+  [Hard]   masked_deterioration
+    MD001: 0.550
+    MD002: 0.475
+  [Medium] demographic_fairness
+    FP001-WF: 0.810
+    FP001-BM: 0.810
+  [Hard]   deteriorating_patient
+    step 1: action='monitor'    reward=0.300  Good at T=0
+    step 2: action='escalate'   reward=1.000  Excellent at T=30
 
-These are representative outputs from one validated run. Scores may vary across providers, model revisions, and token routing behavior.
+============================================================
+  RESULTS SUMMARY
+============================================================
+  simple_triage                  0.875  █████████████████░░░
+  conflicting_vitals             0.275  █████░░░░░░░░░░░░░░░░
+  masked_deterioration           0.513  ██████████░░░░░░░░░░░
+  demographic_fairness           0.810  ████████████████░░░░░
+  deteriorating_patient          1.000  ████████████████████
+
+  Overall average:               0.695
+  Cases evaluated:               10
+============================================================
+```
+
+> Scores may vary by model, provider, and token routing. The difficulty gradient (easy > medium > hard) is the key signal — a well-calibrated environment shows this spread. Masked Deterioration is intentionally the hardest: frontier models frequently miss pharmacological masking.
+>
+> To reproduce: set `API_BASE_URL`, `MODEL_NAME`, `HF_TOKEN` and run `python inference.py`.
 
 ---
 
@@ -341,7 +415,7 @@ medical_triage_env/
 ├── server/
 │   ├── app.py                ← FastAPI server with all endpoints
 │   ├── medical_triage_environment.py  ← Core environment logic
-│   ├── cases.py              ← Patient case bank (24 cases across 5 tasks)
+│   ├── cases.py              ← Patient case bank (28 cases across 5 tasks)
 │   ├── graders.py            ← Deterministic NEWS2-based graders
 │   ├── requirements.txt      ← Server dependencies
 │   └── __init__.py
@@ -410,11 +484,13 @@ BSD 3-Clause (same as OpenEnv)
 
 **Research basis:** MIMIC-III studies show 70% of preventable ED deaths involve patients who deteriorated after initial assessment. Single-step triage misses the core RL opportunity: learning to escalate **before** the patient crashes.
 
-**What it adds:** 2 multi-step cases (3 turns each). Agent must decide at T=0, T=30, T=60 minutes. Correct escalation at T=30 = 1.0. Late escalation at T=60 = 0.6. Missed entirely = 0.0. This is proper RL trajectory learning.
+**What it adds:** 4 multi-step cases (3 turns each). Agent must decide at T=0, T=30, T=60 minutes. Correct escalation at T=30 = 1.0. Late escalation at T=60 = 0.6. Missed entirely = 0.0. This is proper RL trajectory learning.
 
 **Cases:**
 - DT001: Post-operative sepsis. Vitals trending bad at T=30 — correct agent escalates then.
 - DT002: COPD with silent hypercapnia. ABG result at T=30 reveals respiratory failure.
+- DT003: Atypical ACS (STEMI). Low NEWS2 despite ECG changes — escalation needed at T=0.
+- DT004: Acute pulmonary oedema. NIV failing at T=30 — emergency response required.
 
 ---
 
@@ -424,10 +500,10 @@ BSD 3-Clause (same as OpenEnv)
 |---|---|---|---|
 | Simple Triage | 4 | Easy | NHS NEWS2 RCP 2017 |
 | Conflicting Vitals | 3 | Medium | Clinical reasoning literature |
-| Masked Deterioration | 3 | Hard | Pharmacology — beta-blocker/steroid masking |
+| Masked Deterioration | 5 | Hard | Pharmacology — beta-blocker/steroid/uraemia/adrenal masking |
 | Demographic Fairness | 12 (3×4) | Medium | Nature Medicine 2025, Lancet Digital Health 2024 |
-| Deteriorating Patient | 2 (3-step) | Hard | MIMIC-III, npj Digital Medicine 2025 |
-| **Total** | **24** | | |
+| Deteriorating Patient | 4 (3-step) | Hard | MIMIC-III, npj Digital Medicine 2025 |
+| **Total** | **28** | | |
 
 ---
 

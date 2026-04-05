@@ -27,9 +27,9 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import uvicorn
 
 from server.medical_triage_environment import MedicalTriageEnvironment
@@ -53,14 +53,64 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Single shared environment instance
-# (In production / HF Spaces each connection gets its own via WebSocket sessions)
-env = MedicalTriageEnvironment()
+# ─────────────────────────────────────────────────────────────
+# Session manager — isolates concurrent episodes
+# Each reset() creates a new session with its own env instance.
+# Sessions expire after SESSION_TTL_SECONDS of inactivity.
+# A "default" session (key="_default") handles legacy clients
+# that don't send a session_id, preserving full backward compat.
+# ─────────────────────────────────────────────────────────────
+import time as _time
+import uuid as _uuid
+
+SESSION_TTL_SECONDS = 1800  # 30 minutes
+
+class SessionManager:
+    def __init__(self):
+        self._sessions: dict[str, tuple[MedicalTriageEnvironment, float]] = {}
+        # Pre-create default session for backward-compat clients
+        self._sessions["_default"] = (MedicalTriageEnvironment(), _time.monotonic())
+
+    def get_or_create(self, session_id: str | None) -> tuple[str, MedicalTriageEnvironment]:
+        """Return (session_id, env). Creates new session if session_id is None."""
+        self._evict_stale()
+        if session_id is None:
+            # Legacy / single-client path — always returns the default session
+            sid = "_default"
+        else:
+            sid = session_id
+        if sid not in self._sessions:
+            self._sessions[sid] = (MedicalTriageEnvironment(), _time.monotonic())
+        env_inst, _ = self._sessions[sid]
+        self._sessions[sid] = (env_inst, _time.monotonic())   # refresh TTL
+        return sid, env_inst
+
+    def new_session(self, session_id: str | None) -> tuple[str, MedicalTriageEnvironment]:
+        """Always create a fresh env for reset().
+        - session_id=None  → resets the '_default' session (backward-compat: no session_id needed)
+        - session_id given → resets that specific session slot (concurrent isolation)
+        """
+        self._evict_stale()
+        sid = session_id if session_id is not None else "_default"
+        self._sessions[sid] = (MedicalTriageEnvironment(), _time.monotonic())
+        return sid, self._sessions[sid][0]
+
+    def _evict_stale(self):
+        now = _time.monotonic()
+        stale = [k for k, (_, ts) in self._sessions.items()
+                 if k != "_default" and now - ts > SESSION_TTL_SECONDS]
+        for k in stale:
+            del self._sessions[k]
+
+    @property
+    def active_count(self) -> int:
+        return len(self._sessions)
+
+sessions = SessionManager()
 
 # ── Episode history tracker — powers the learning curve chart ──
 # Stores every scored episode so judges can see score progression over time
 from collections import deque
-import time as _time
 
 class EpisodeHistory:
     """Tracks every scored episode for training progress visualization."""
@@ -114,12 +164,8 @@ async def health():
 # ─────────────────────────────────────────────────────────────
 # Core OpenEnv endpoints
 # ─────────────────────────────────────────────────────────────
-#from fastapi import Body
-#@app.post("/reset", response_model=StepResult)
-#async def reset(request: ResetRequest = Body(default=ResetRequest())):
-
 @app.post("/reset", response_model=StepResult)
-async def reset(request: ResetRequest = ResetRequest()):
+async def reset(request: ResetRequest = Body(default=ResetRequest())):
     """
     Start a new episode. Returns the first observation (patient case).
 
@@ -127,9 +173,14 @@ async def reset(request: ResetRequest = ResetRequest()):
     - task_id: which difficulty task to use
     - case_index: specific case (for reproducibility)
     - seed: random seed
+    - session_id: pass your own ID to reuse a session slot; omit to get a fresh one
+
+    The response info dict always contains the session_id to use in subsequent step() calls.
     """
     try:
-        result = env.reset(request)
+        sid, env_inst = sessions.new_session(request.session_id)
+        result = env_inst.reset(request)
+        result.info["session_id"] = sid
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -137,9 +188,15 @@ async def reset(request: ResetRequest = ResetRequest()):
 
 @app.post("/step", response_model=StepResult)
 async def step(request: StepRequest):
-    """Submit a triage assessment. Returns scored observation with reward."""
+    """Submit a triage assessment. Returns scored observation with reward.
+
+    Include the session_id from reset() info to ensure your step is applied
+    to the correct episode (required when running concurrent requests).
+    """
     try:
-        result = env.step(request.action)
+        sid, env_inst = sessions.get_or_create(request.session_id)
+        result = env_inst.step(request.action)
+        result.info["session_id"] = sid
         # Record every completed episode for training progress visualization
         if result.done:
             obs = result.observation
@@ -182,11 +239,59 @@ async def get_stats():
 
 
 @app.get("/state", response_model=TriageState)
-async def state():
+async def state(session_id: Optional[str] = None):
     """
     Get current episode metadata: step count, cumulative reward, tasks completed, etc.
+    Pass session_id (from reset info) as a query param for session-specific state.
     """
-    return env.state
+    _, env_inst = sessions.get_or_create(session_id)
+    return env_inst.state
+
+
+# ─────────────────────────────────────────────────────────────
+# Demographic fairness multi-variant grader endpoint
+#
+# The per-step grader (grade_single_fairness_variant) scores each
+# demographic variant independently for clinical accuracy.
+# This endpoint scores CONSISTENCY across all variants of a case
+# group — the key fairness signal (worth 50% of the task score).
+#
+# Usage:
+#   POST /grade-fairness
+#   Body: { "group_id": "FP001", "responses": { "FP001-WF": {...}, "FP001-BM": {...}, ... } }
+#   Returns: { "score": 0.85, "breakdown": {...}, "group_id": "FP001" }
+# ─────────────────────────────────────────────────────────────
+class FairnessGradeRequest(BaseModel):
+    group_id: str = Field(description="The fairness case group prefix (e.g. 'FP001')")
+    responses: dict = Field(description="Dict mapping case_id → agent TriageAction dict for all variants in this group")
+
+
+@app.post("/grade-fairness")
+async def grade_fairness(request: FairnessGradeRequest):
+    """
+    Grade demographic fairness across all variants of a case group.
+
+    Checks that the agent gave identical clinical assessments to patients
+    whose demographics differ but whose vitals are identical.
+    Returns a parity score (0.0–1.0) — 1.0 means fully consistent and correct.
+    """
+    from server.cases import CASE_BANK
+    from server.graders import grade_demographic_fairness
+
+    all_cases = CASE_BANK.get("demographic_fairness", [])
+    # Filter to just the requested group
+    group_cases = [c for c in all_cases if c["case_id"].startswith(request.group_id)]
+    if not group_cases:
+        raise HTTPException(status_code=404, detail=f"No cases found for group '{request.group_id}'")
+
+    score, breakdown = grade_demographic_fairness(request.responses, group_cases)
+    return {
+        "group_id": request.group_id,
+        "score": score,
+        "breakdown": {k: v for k, v in breakdown.items() if not k.startswith("_")},
+        "detail": breakdown.get("_responses", {}),
+        "case_count": len(group_cases),
+    }
 
 
 # ─────────────────────────────────────────────────────────────

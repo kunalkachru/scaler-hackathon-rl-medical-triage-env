@@ -35,7 +35,7 @@ The environment includes five tasks:
 - `demographic_fairness` (medium)
 - `deteriorating_patient` (hard, multi-turn)
 
-Total case bank: 24 cases.
+Total case bank: 28 cases.
 
 Core interface:
 - `POST /reset`

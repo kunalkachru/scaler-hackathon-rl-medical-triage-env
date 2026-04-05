@@ -265,11 +265,19 @@ class ResetRequest(BaseModel):
         default=None,
         description="Random seed for reproducibility"
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Session identifier for concurrent isolation. Returned by reset(); pass it to step() and state(). If omitted, a new session is created automatically."
+    )
 
 
 class StepRequest(BaseModel):
     """Request body for POST /step"""
     action: TriageAction
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Session identifier returned by reset(). Required when running concurrent episodes."
+    )
 
 
 class StepResult(BaseModel):

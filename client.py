@@ -40,12 +40,14 @@ class MedicalTriageEnv:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
+        self._session_id: str | None = None  # set after reset(), used by step()
 
     def reset(
         self,
         task_id: str | None = None,
         case_index: int | None = None,
         seed: int | None = None,
+        session_id: str | None = None,
     ) -> StepResult:
         """Start a new episode. Returns first observation (patient case)."""
         payload: dict = {}
@@ -55,21 +57,31 @@ class MedicalTriageEnv:
             payload["case_index"] = case_index
         if seed is not None:
             payload["seed"] = seed
+        if session_id is not None:
+            payload["session_id"] = session_id
 
         resp = self.session.post(f"{self.base_url}/reset", json=payload)
         resp.raise_for_status()
-        return StepResult(**resp.json())
+        result = StepResult(**resp.json())
+        # Cache session_id so step() targets the correct episode automatically
+        self._session_id = result.info.get("session_id") if result.info else None
+        return result
 
-    def step(self, action: TriageAction) -> StepResult:
+    def step(self, action: TriageAction, session_id: str | None = None) -> StepResult:
         """Submit a triage assessment. Returns scored observation."""
-        payload = {"action": action.model_dump(exclude_none=True)}
+        payload: dict = {"action": action.model_dump(exclude_none=True)}
+        sid = session_id or self._session_id
+        if sid:
+            payload["session_id"] = sid
         resp = self.session.post(f"{self.base_url}/step", json=payload)
         resp.raise_for_status()
         return StepResult(**resp.json())
 
-    def state(self) -> TriageState:
+    def state(self, session_id: str | None = None) -> TriageState:
         """Get current episode state."""
-        resp = self.session.get(f"{self.base_url}/state")
+        sid = session_id or self._session_id
+        params = {"session_id": sid} if sid else {}
+        resp = self.session.get(f"{self.base_url}/state", params=params)
         resp.raise_for_status()
         return TriageState(**resp.json())
 

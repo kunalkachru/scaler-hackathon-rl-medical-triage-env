@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.
 COPY __init__.py /app/__init__.py
 COPY models.py /app/models.py
 COPY client.py /app/client.py
+COPY inference.py /app/inference.py
 COPY server/ /app/server/
 
 # Load environment variables from .env file if it exists

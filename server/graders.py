@@ -769,7 +769,11 @@ def grade_confidence_calibration(confidence: float | None,
     Hard cases (high NEWS2, masked): moderate confidence expected.
     Got it wrong: low confidence rewarded (appropriate uncertainty).
 
-    Returns bonus in [0.0, 0.10] added to existing score.
+    Returns bonus in [0.0, 0.05] added to existing score.
+    Max capped at 0.05 (not 0.10) to prevent trivial gaming by always
+    submitting a fixed confidence value regardless of actual certainty.
+    True calibration signal: the MATCH between expressed confidence and
+    case difficulty matters more than the absolute value.
     """
     if confidence is None:
         return 0.0
@@ -778,17 +782,20 @@ def grade_confidence_calibration(confidence: float | None,
 
     if score_was_correct:
         if news2_score <= 2:
-            # Easy case, correct answer: confidence > 0.8 is well-calibrated
-            return 0.10 if confidence >= 0.8 else 0.05 if confidence >= 0.6 else 0.0
+            # Easy case, correct answer: high confidence (>0.85) is well-calibrated
+            # Submitting 0.5 on an easy correct answer is poorly calibrated — no bonus
+            return 0.05 if confidence >= 0.85 else 0.02 if confidence >= 0.70 else 0.0
         elif news2_score >= 7:
-            # Hard case, correct answer: confidence 0.6-0.9 is well-calibrated
-            return 0.10 if 0.6 <= confidence <= 0.9 else 0.05
+            # Hard case, correct answer: moderate confidence (0.55-0.85) is well-calibrated
+            # Overconfidence (>0.90) on a hard case = poor calibration
+            return 0.05 if 0.55 <= confidence <= 0.85 else 0.02 if confidence < 0.55 else 0.0
         else:
-            # Medium case
-            return 0.07 if 0.6 <= confidence <= 0.85 else 0.03
+            # Medium case: confidence in 0.60-0.88 is well-calibrated
+            return 0.04 if 0.60 <= confidence <= 0.88 else 0.01
     else:
-        # Got it wrong: rewarded for expressing uncertainty
-        return 0.10 if confidence <= 0.5 else 0.05 if confidence <= 0.7 else 0.0
+        # Got it wrong: rewarded ONLY for genuine uncertainty (confidence ≤ 0.45)
+        # A model that submits confidence=0.8 on a wrong answer should not be rewarded
+        return 0.05 if confidence <= 0.45 else 0.02 if confidence <= 0.60 else 0.0
 
 
 # ─────────────────────────────────────────────────────────────
@@ -796,6 +803,7 @@ def grade_confidence_calibration(confidence: float | None,
 # ─────────────────────────────────────────────────────────────
 
 GRADER_MAP["demographic_fairness"] = grade_single_fairness_variant
-GRADER_MAP["deteriorating_patient"] = lambda resp, case: grade_deteriorating_patient_step(
-    resp, case.get("timeline", [{}])[0], 0, case
-)
+# deteriorating_patient is NOT in GRADER_MAP — the environment routes it to
+# _step_deteriorating() which calls grade_deteriorating_patient_step() directly
+# with the correct step_index. Adding it here with a fixed step_index=0 would
+# be misleading dead code.

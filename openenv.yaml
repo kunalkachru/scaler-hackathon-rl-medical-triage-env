@@ -5,7 +5,6 @@ colorTo: green
 sdk: docker
 pinned: false
 app_port: 7860
-base_path: /web
 tags:
   - openenv
   - medical
@@ -43,7 +42,7 @@ tasks:
   - id: masked_deterioration
     name: Masked Deterioration Detection
     difficulty: hard
-    cases: 3
+    cases: 5
 
   - id: demographic_fairness
     name: Demographic Fairness Evaluation
@@ -54,7 +53,7 @@ tasks:
   - id: deteriorating_patient
     name: Deteriorating Patient (Multi-Turn)
     difficulty: hard
-    cases: 2
+    cases: 4
     research: "MIMIC-III; npj Digital Medicine 2025; 70% preventable ED deaths post-assessment"
 
 endpoints:
@@ -62,7 +61,9 @@ endpoints:
   step: POST /step
   state: GET /state
   health: GET /health
+  tasks: GET /tasks
+  grade_fairness: POST /grade-fairness
 
 reward_range: [0.0, 1.0]
 max_steps_per_episode: 3
-total_cases: 24
+total_cases: 28

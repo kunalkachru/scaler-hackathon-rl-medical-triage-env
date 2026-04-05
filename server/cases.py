@@ -106,15 +106,15 @@ SIMPLE_TRIAGE_CASES = [
             "consciousness": "alert"
         },
         "medications": [],
-        "news2_score": 9,  # RR=2, SpO2=1, BP=3, HR=2, Temp=0, AVPU=0 → 8+
+        "news2_score": 8,  # RR=2, SpO2=1, BP=3, HR=2, Temp=0, AVPU=0 → 8
         "expected_priority": "critical",
         "expected_classification": "critical",
         "ground_truth": {
             "priority": "critical",
-            "news2_score": 9,
+            "news2_score": 8,
             "critical_sign": "systolic_bp",
             "recommended_action": "emergency_response",
-            "rationale": "Hypotension (BP=88), tachycardia, NEWS2≥9 = critical"
+            "rationale": "Hypotension (BP=88), tachycardia, NEWS2=8 = critical"
         }
     },
     {
@@ -401,6 +401,101 @@ MASKED_DETERIORATION_CASES = [
                 "This is a STEMI equivalent requiring cath lab activation."
             )
         }
+    },
+    {
+        "case_id": "MD004",
+        "task_id": "masked_deterioration",
+        "history": (
+            "54-year-old male. End-stage renal disease on haemodialysis (3×/week). "
+            "On: sevelamer, cinacalcet, erythropoietin. Missed last two dialysis sessions. "
+            "Presented with mild shortness of breath and fatigue. 'Feels a bit puffy'. "
+            "Vitals: HR=78, RR=20, SpO2=96%, BP=168/104, Temp=36.8°C, Consciousness=Alert. "
+            "NEWS2=2. ECG shows tall peaked T-waves. K+ result pending."
+        ),
+        "vitals": {
+            "respiratory_rate": 20,
+            "spo2": 96,
+            "systolic_bp": 168,
+            "heart_rate": 78,
+            "temperature": 36.8,
+            "consciousness": "alert",
+            "ecg_peaked_t_waves": True,
+            "potassium_pending": True,
+            "bilateral_oedema": True
+        },
+        "medications": ["sevelamer", "cinacalcet", "erythropoietin"],
+        "news2_score": 2,   # RR=0, SpO2=0, BP=0, HR=0, Temp=0, AVPU=0 — appears stable
+        "true_severity": "life_threatening_hyperkalaemia",
+        "expected_priority": "critical",
+        "expected_classification": "critical",
+        "ground_truth": {
+            "priority": "critical",
+            "news2_score": 2,
+            "true_severity": "hyperkalaemia_dialysis_dependent",
+            "masking_condition": "uraemia_and_missed_dialysis",
+            "masked_sign": "heart_rate",
+            "why_masked": (
+                "Dialysis-dependent patients who miss sessions accumulate potassium. "
+                "Hyperkalaemia initially causes bradycardia and peaked T-waves before VF/asystole. "
+                "NEWS2=2 is completely misleading — cardiac arrest risk is immediate."
+            ),
+            "critical_clues": ["ecg_peaked_t_waves", "missed_dialysis", "bilateral_oedema", "potassium_pending"],
+            "condition": "hyperkalaemia_pre_arrest",
+            "recommended_action": "emergency_response",
+            "rationale": (
+                "Missed dialysis + peaked T-waves = life-threatening hyperkalaemia until proven otherwise. "
+                "NEWS2 has no potassium parameter — it cannot detect this emergency. "
+                "ECG changes are the key override. K+ typically >6.5 in this presentation."
+            )
+        }
+    },
+    {
+        "case_id": "MD005",
+        "task_id": "masked_deterioration",
+        "history": (
+            "67-year-old female. Known adrenal insufficiency on maintenance hydrocortisone. "
+            "Also on: fludrocortisone, levothyroxine. "
+            "Presented with 2-day history of nausea, vomiting, and confusion. Felt well enough "
+            "to walk into ED. Has been unable to take oral medications for 24 hours due to vomiting. "
+            "Vitals: HR=106, RR=18, SpO2=98%, BP=88/52, Temp=36.2°C, Consciousness=Alert. "
+            "NEWS2=4. Random blood glucose: 2.4 mmol/L. Na+=126 (low)."
+        ),
+        "vitals": {
+            "respiratory_rate": 18,
+            "spo2": 98,
+            "systolic_bp": 88,
+            "heart_rate": 106,
+            "temperature": 36.2,
+            "consciousness": "alert",
+            "blood_glucose": 2.4,
+            "sodium": 126
+        },
+        "medications": ["hydrocortisone", "fludrocortisone", "levothyroxine"],
+        "news2_score": 4,   # BP=2, HR=1, RR=0, SpO2=0, Temp=0, AVPU=0
+        "true_severity": "addisonian_crisis",
+        "expected_priority": "critical",
+        "expected_classification": "critical",
+        "ground_truth": {
+            "priority": "critical",
+            "news2_score": 4,
+            "true_severity": "addisonian_crisis",
+            "masking_drug_or_condition": "hydrocortisone_dose_missed",
+            "masked_sign": "cortisol_deficiency_shock",
+            "why_masked": (
+                "Addisonian crisis (acute adrenal insufficiency) presents with hypotension, "
+                "hyponatraemia, and hypoglycaemia — but the patient appears alert and ambulatory initially. "
+                "NEWS2=4 underestimates severity. Without IV hydrocortisone within hours, mortality is high."
+            ),
+            "critical_clues": ["missed_steroid_dose", "hyponatraemia", "hypoglycaemia", "vomiting_preventing_oral_meds"],
+            "condition": "addisonian_crisis",
+            "recommended_action": "emergency_response",
+            "rationale": (
+                "Addisonian crisis is a medical emergency requiring immediate IV hydrocortisone. "
+                "Patient cannot absorb oral steroids due to vomiting. "
+                "Hyponatraemia (Na=126) + hypoglycaemia (glucose 2.4) + known adrenal insufficiency = crisis. "
+                "NEWS2=4 does not capture endocrine emergencies."
+            )
+        }
     }
 ]
 
@@ -675,6 +770,131 @@ DETERIORATION_CASES = [
             "critical_moment": "T=30",
             "key_signals": ["hypercapnia_on_abg", "decreasing_consciousness", "rising_rr"],
             "lesson": "In COPD: SpO2 at baseline is NOT reassuring. Monitor ABG and consciousness trend."
+        }
+    },
+    {
+        "case_id": "DT003",
+        "task_id": "deteriorating_patient",
+        "description": "ACS with atypical presentation — ECG changes demand immediate escalation at T=0",
+        "timeline": [
+            {
+                "time": "T=0 (admission)",
+                "history": (
+                    "61-year-old male. Diabetic on metformin and aspirin. Presents with 45-minute "
+                    "history of central chest pressure radiating to jaw. Diaphoretic. Denies typical "
+                    "crushing chest pain — describes it as 'indigestion'. "
+                    "Vitals: HR=96, RR=18, SpO2=97%, BP=148/92, Temp=36.9°C, Alert. "
+                    "NEWS2=1. ECG shows ST elevation in II, III, aVF. Troponin pending."
+                ),
+                "vitals": {"respiratory_rate": 18, "spo2": 97, "systolic_bp": 148,
+                           "heart_rate": 96, "temperature": 36.9, "consciousness": "alert"},
+                "news2": 1,
+                "correct_action": "escalate",
+                "reward_for_correct": 0.6,    # Must escalate on ECG/symptoms despite low NEWS2
+                "reward_for_emergency": 0.4,  # Emergency acceptable — STEMI protocol
+                "reward_for_monitor": 0.0,    # Fatal error — STEMI missed
+            },
+            {
+                "time": "T=30 min",
+                "history": (
+                    "Troponin returned markedly elevated (x12 upper limit normal). "
+                    "Patient now more distressed. Vitals: HR=118 (up from 96), RR=24, "
+                    "SpO2=93% (down from 97%), BP=94/60 (falling — cardiogenic shock), "
+                    "Temp=36.9°C, Alert. NEWS2=9. Repeat ECG: progressive ST elevation."
+                ),
+                "vitals": {"respiratory_rate": 24, "spo2": 93, "systolic_bp": 94,
+                           "heart_rate": 118, "temperature": 36.9, "consciousness": "alert"},
+                "news2": 9,
+                "correct_action": "emergency_response",
+                "reward_for_correct": 1.0,
+                "reward_for_monitor": 0.0,
+                "reward_for_escalate": 0.3,   # Too slow — cardiogenic shock requires emergency
+            },
+            {
+                "time": "T=60 min",
+                "history": (
+                    "Patient now pale, sweating, barely responding. "
+                    "Vitals: HR=42 (bradycardia — complete heart block), RR=28, SpO2=88%, "
+                    "BP=72/40 (profound shock), Temp=36.6°C, Consciousness=Voice. "
+                    "NEWS2=18. Cardiac arrest imminent."
+                ),
+                "vitals": {"respiratory_rate": 28, "spo2": 88, "systolic_bp": 72,
+                           "heart_rate": 42, "temperature": 36.6, "consciousness": "voice"},
+                "news2": 18,
+                "correct_action": "emergency_response",
+                "reward_for_correct": 0.4,   # Very late — but patient may still survive with CPR
+                "reward_for_monitor": 0.0,
+            }
+        ],
+        "expected_priority": "critical",
+        "ground_truth": {
+            "diagnosis": "stemi_inferior_cardiogenic_shock",
+            "critical_moment": "T=0",
+            "key_signals": ["st_elevation_ecg", "elevated_troponin", "jaw_radiation", "diaphoresis"],
+            "lesson": "Diabetic patients have atypical ACS presentation. Low NEWS2 ≠ low risk when ECG shows STEMI."
+        }
+    },
+    {
+        "case_id": "DT004",
+        "task_id": "deteriorating_patient",
+        "description": "Acute pulmonary oedema in heart failure — monitor at T=0 (NIV just started), emergency at T=30 when NIV fails",
+        "timeline": [
+            {
+                "time": "T=0 (admission)",
+                "history": (
+                    "79-year-old female. Known ischaemic heart failure (EF 30%). On: furosemide, "
+                    "ramipril, bisoprolol, spironolactone. Presents with 3-hour worsening dyspnoea "
+                    "and orthopnoea. CXR shows bilateral basal crepitations. "
+                    "Vitals: HR=102, RR=26, SpO2=90%, BP=178/106, Temp=36.5°C, Alert. "
+                    "NEWS2=8. Started on NIV (BiPAP) and IV furosemide."
+                ),
+                "vitals": {"respiratory_rate": 26, "spo2": 90, "systolic_bp": 178,
+                           "heart_rate": 102, "temperature": 36.5, "consciousness": "alert"},
+                "news2": 8,
+                "correct_action": "monitor",  # BiPAP + furosemide just started — watch response
+                "reward_for_correct": 0.3,
+                "reward_for_escalate": 0.1,   # Premature — NIV trial has just begun
+                "reward_for_emergency": 0.0,  # Over-escalation before trial completes
+                "reward_for_monitor": 0.3,
+            },
+            {
+                "time": "T=30 min",
+                "history": (
+                    "NIV trial failing — patient not improving on BiPAP. "
+                    "Vitals: HR=116 (worsening), RR=32 (up from 26 — tiring), SpO2=86% (down from 90%), "
+                    "BP=162/98, Temp=36.5°C, Consciousness=Voice (now drowsy on BiPAP). "
+                    "NEWS2=13. Accessory muscle use. Unable to speak in full sentences."
+                ),
+                "vitals": {"respiratory_rate": 32, "spo2": 86, "systolic_bp": 162,
+                           "heart_rate": 116, "temperature": 36.5, "consciousness": "voice"},
+                "news2": 13,
+                "correct_action": "emergency_response",
+                "reward_for_correct": 1.0,    # NIV failure = intubation required
+                "reward_for_escalate": 0.2,   # Too cautious — patient is failing NIV
+                "reward_for_monitor": 0.0,
+            },
+            {
+                "time": "T=60 min",
+                "history": (
+                    "Patient exhausted, no longer maintaining airway. "
+                    "Vitals: HR=52 (bradycardia from hypoxia), RR=8 (respiratory arrest imminent), "
+                    "SpO2=78%, BP=96/58, Temp=36.3°C, Consciousness=Pain. "
+                    "NEWS2=20. Pre-arrest state."
+                ),
+                "vitals": {"respiratory_rate": 8, "spo2": 78, "systolic_bp": 96,
+                           "heart_rate": 52, "temperature": 36.3, "consciousness": "pain"},
+                "news2": 20,
+                "correct_action": "emergency_response",
+                "reward_for_correct": 0.3,   # Very late — poor prognosis
+                "reward_for_monitor": 0.0,
+            }
+        ],
+        "expected_priority": "critical",
+        "ground_truth": {
+            "diagnosis": "acute_pulmonary_oedema_niv_failure",
+            "critical_moment": "T=30",
+            "key_signals": ["niv_failure", "rising_rr", "falling_spo2", "decreased_consciousness"],
+            "lesson": "In APO: NIV failure is an emergency. Rising RR on BiPAP = intubation threshold crossed."
         }
     },
 ]

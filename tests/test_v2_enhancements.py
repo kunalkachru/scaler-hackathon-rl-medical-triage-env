@@ -368,9 +368,9 @@ class TestConfidenceCalibration:
     """
 
     def test_easy_case_correct_high_confidence_gets_bonus(self):
-        """NEWS2=0, correct answer, confidence=0.9 → max bonus."""
+        """NEWS2=0, correct answer, confidence=0.9 → max bonus (capped at 0.05)."""
         bonus = grade_confidence_calibration(0.9, 0, True)
-        assert bonus == 0.10, f"Expected 0.10, got {bonus}"
+        assert bonus == 0.05, f"Expected 0.05 (capped), got {bonus}"
 
     def test_easy_case_correct_low_confidence_small_bonus(self):
         """Correct but oddly uncertain on easy case → smaller bonus."""
@@ -404,8 +404,8 @@ class TestConfidenceCalibration:
         """Values outside [0,1] should be clamped safely."""
         bonus1 = grade_confidence_calibration(1.5, 0, True)  # > 1.0
         bonus2 = grade_confidence_calibration(-0.5, 0, True)  # < 0.0
-        assert 0.0 <= bonus1 <= 0.10
-        assert 0.0 <= bonus2 <= 0.10
+        assert 0.0 <= bonus1 <= 0.05
+        assert 0.0 <= bonus2 <= 0.05
 
     def test_confidence_bonus_adds_to_total_score(self):
         """Confidence bonus should appear in score_breakdown and increase total reward."""
@@ -452,9 +452,9 @@ class TestAllFiveTasksIntegration:
         from server.cases import CASE_BANK
         assert len(CASE_BANK["simple_triage"]) == 4
         assert len(CASE_BANK["conflicting_vitals"]) == 3
-        assert len(CASE_BANK["masked_deterioration"]) == 3
+        assert len(CASE_BANK["masked_deterioration"]) == 5
         assert len(CASE_BANK["demographic_fairness"]) == 12
-        assert len(CASE_BANK["deteriorating_patient"]) == 2
+        assert len(CASE_BANK["deteriorating_patient"]) == 4
 
     def test_score_always_in_range_all_tasks(self):
         """Critical invariant: all graders must return [0.0, 1.0]."""
