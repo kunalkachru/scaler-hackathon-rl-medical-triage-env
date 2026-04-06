@@ -1,11 +1,11 @@
 # Medical Triage Environment — Exhaustive Test Report
 
-**Date:** 2026-04-01 (core suite snapshot)  
+**Date:** 2026-04-06 (full suite snapshot)  
 **Environment:** Medical Triage Environment v2.0.0  
 **Python:** 3.12.3 | **pytest:** 9.0.2  
-**Core Suite Tests:** 96 | **Passed:** 96 | **Failed:** 0  
-**Current Full Suite Status:** 99 passed (`pytest tests/ -q`)  
-**Core Suite Run time:** 0.38s  
+**Core Suite Tests:** 103 | **Passed:** 103 | **Failed:** 0  
+**Current Full Suite Status:** 106 passed (`pytest tests/ -q`)  
+**Core Suite Run time:** ~0.4s  
 
 > Note: This report is a deep-dive narrative for foundational grader/environment suites.  
 > For latest evaluator workflow and full project validation, use `docs/PROJECT_DOCUMENTATION.md` and run `pytest tests/ -q`.
@@ -15,29 +15,43 @@
 ## How to Run
 
 ```bash
-# From project root (full suite)
+# From project root (full suite — 106 tests)
 pytest tests/ -q
 
-# Optional: run only the core suites documented in this report
+# Core grader + environment suites only
 pytest tests/test_graders.py tests/test_environment.py -v
+
+# API contract tests (requires live server on localhost:8000)
+pytest tests/test_api_contract.py -v
+
+# UI contract test (requires live server on localhost:8000)
+pytest tests/test_ui_contract.py -v
 ```
 
 ---
 
 ## Test Suites Overview
 
-| Suite | File | Tests | Status |
-|---|---|---|---|
-| NEWS2 Computation | `test_graders.py` | 7 | ✅ All Pass |
-| Priority Distance | `test_graders.py` | 4 | ✅ All Pass |
-| Task 1 Grader — Simple Triage | `test_graders.py` | 7 | ✅ All Pass |
-| Task 2 Grader — Conflicting Vitals | `test_graders.py` | 4 | ✅ All Pass |
-| Task 3 Grader — Masked Deterioration | `test_graders.py` | 5 | ✅ All Pass |
-| Grader Dispatch | `test_graders.py` | 3 | ✅ All Pass |
-| Environment Reset | `test_environment.py` | 7 | ✅ All Pass |
-| Environment Step | `test_environment.py` | 8 | ✅ All Pass |
-| Environment State | `test_environment.py` | 5 | ✅ All Pass |
-| Full Episode Flows | `test_environment.py` | 4 | ✅ All Pass |
+| Suite | File | Tests | Status | Notes |
+|---|---|---|---|---|
+| NEWS2 Computation | `test_graders.py` | 7 | ✅ All Pass | NHS RCP 2017 boundary validation |
+| Priority Distance | `test_graders.py` | 4 | ✅ All Pass | Asymmetric under-triage penalty |
+| Task 1 Grader — Simple Triage | `test_graders.py` | 7 | ✅ All Pass | |
+| Task 2 Grader — Conflicting Vitals | `test_graders.py` | 4 | ✅ All Pass | |
+| Task 3 Grader — Masked Deterioration | `test_graders.py` | 5 | ✅ All Pass | |
+| Grader Dispatch | `test_graders.py` | 3 | ✅ All Pass | |
+| Environment Reset | `test_environment.py` | 7 | ✅ All Pass | |
+| Environment Step | `test_environment.py` | 8 | ✅ All Pass | |
+| Environment State | `test_environment.py` | 5 | ✅ All Pass | |
+| Full Episode Flows | `test_environment.py` | 4 | ✅ All Pass | |
+| Fairness Grader | `test_environment.py` | 7 | ✅ All Pass | Demographic parity across 4 variants |
+| Multi-Turn Deterioration | `test_environment.py` | 9 | ✅ All Pass | 3-step episodes, escalation reward |
+| Confidence Calibration | `test_environment.py` | 7 | ✅ All Pass | Brier-score bonus up to +0.05 |
+| Adversarial Robustness | `test_environment.py` | 16 | ✅ All Pass | Null fields, wrong types, empty body |
+| API Contract | `test_api_contract.py` | 9 | ✅ All Pass | Live server required |
+| UI Contract | `test_ui_contract.py` | 3 | ✅ All Pass | Gradio /web endpoint check |
+
+**Total: 106 tests — 106 passed, 0 failed**
 
 ---
 

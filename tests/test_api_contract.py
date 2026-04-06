@@ -128,3 +128,46 @@ def test_session_isolation_concurrent_episodes():
     assert step_b.status_code == 200
     # Sessions are isolated — B's reward must be based on CV001, not ST001
     assert step_b.json()["observation"]["task_id"] == "conflicting_vitals"
+
+
+def test_metrics_endpoint_structure():
+    """/metrics returns expected top-level keys and numeric values."""
+    resp = client.get("/metrics")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "total_episodes" in data
+    assert "active_sessions" in data
+    assert "by_task" in data
+    assert "difficulty_gradient_verified" in data
+    assert "cases_covered" in data
+    assert isinstance(data["active_sessions"], int)
+    assert isinstance(data["total_episodes"], int)
+
+
+def test_metrics_by_task_has_distribution_fields():
+    """/metrics by_task entries have distribution stats when episodes exist."""
+    # Run one episode to populate history
+    client.post("/reset", json={"task_id": "simple_triage", "case_index": 0})
+    client.post("/step", json={"action": {"priority": "high", "news2_score": 8,
+                                           "critical_sign": "respiratory_rate",
+                                           "recommended_action": "urgent_review"}})
+
+    resp = client.get("/metrics")
+    assert resp.status_code == 200
+    data = resp.json()
+    if data["total_episodes"] > 0:
+        for task_data in data["by_task"].values():
+            for key in ("count", "avg", "min", "max", "p25", "p75"):
+                assert key in task_data, f"Missing key '{key}' in by_task entry"
+
+
+def test_step_info_is_typed():
+    """StepResult.info contains session_id after reset."""
+    resp = client.post("/reset", json={"task_id": "simple_triage", "case_index": 0})
+    assert resp.status_code == 200
+    info = resp.json()["info"]
+    assert "session_id" in info
+    assert isinstance(info["session_id"], str)
+    assert "episode_id" in info
+    assert "task_id" in info
+    assert info["task_id"] == "simple_triage"

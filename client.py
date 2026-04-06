@@ -64,7 +64,7 @@ class MedicalTriageEnv:
         resp.raise_for_status()
         result = StepResult(**resp.json())
         # Cache session_id so step() targets the correct episode automatically
-        self._session_id = result.info.get("session_id") if result.info else None
+        self._session_id = result.info.session_id if result.info else None
         return result
 
     def step(self, action: TriageAction, session_id: str | None = None) -> StepResult:

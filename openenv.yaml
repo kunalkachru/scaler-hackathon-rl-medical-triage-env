@@ -63,6 +63,7 @@ endpoints:
   health: GET /health
   tasks: GET /tasks
   grade_fairness: POST /grade-fairness
+  metrics: GET /metrics
 
 reward_range: [0.0, 1.0]
 max_steps_per_episode: 3

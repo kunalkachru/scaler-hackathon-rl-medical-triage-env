@@ -211,13 +211,13 @@ CONFLICTING_VITALS_CASES = [
             "priority": "medium",
             "news2_score": 3,
             "critical_sign": "heart_rate",
-            "misleading_signs": ["psychiatric_history"],
+            "misleading_signs": ["psychiatric_history", "anxiety", "panic_attack_history"],
             "condition": "tachycardia_undifferentiated",
             "recommended_action": "urgent_review",
             "rationale": (
-                "Cannot attribute to anxiety without ECG. NEWS2=3 with tachycardia "
-                "and elevated RR requires urgent review regardless of history. "
-                "Psychiatric history is a cognitive trap — do not dismiss."
+                "Cannot attribute tachycardia to anxiety without ECG. NEWS2=3 with HR=118 "
+                "and elevated RR requires urgent review regardless of psychiatric history. "
+                "Anxiety and panic_attack_history are cognitive traps — do not dismiss cardiac cause without workup."
             )
         }
     },

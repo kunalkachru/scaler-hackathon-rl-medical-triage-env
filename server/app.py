@@ -180,7 +180,7 @@ async def reset(request: ResetRequest = Body(default=ResetRequest())):
     try:
         sid, env_inst = sessions.new_session(request.session_id)
         result = env_inst.reset(request)
-        result.info["session_id"] = sid
+        result.info.session_id = sid
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -196,7 +196,7 @@ async def step(request: StepRequest):
     try:
         sid, env_inst = sessions.get_or_create(request.session_id)
         result = env_inst.step(request.action)
-        result.info["session_id"] = sid
+        result.info.session_id = sid
         # Record every completed episode for training progress visualization
         if result.done:
             obs = result.observation
@@ -236,6 +236,82 @@ async def get_stats():
     A working RL environment should show this spread.
     """
     return history.stats()
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Rich evaluator-facing metrics endpoint.
+
+    Returns:
+    - Per-task score distributions (min/max/avg/p25/p75) demonstrating difficulty gradient
+    - Case coverage (which cases have been tested)
+    - Active session count
+    - Difficulty gradient verification: simple_triage avg should exceed masked_deterioration avg
+    """
+    eps = history.as_list()
+    active_sessions = sessions.active_count
+
+    if not eps:
+        return {
+            "total_episodes": 0,
+            "active_sessions": active_sessions,
+            "by_task": {},
+            "difficulty_gradient_verified": False,
+            "cases_covered": {},
+        }
+
+    DIFFICULTY_ORDER = [
+        "simple_triage",
+        "demographic_fairness",
+        "conflicting_vitals",
+        "masked_deterioration",
+        "deteriorating_patient",
+    ]
+
+    by_task: dict[str, list[float]] = {}
+    cases_covered: dict[str, set] = {}
+    for e in eps:
+        tid = e["task_id"]
+        by_task.setdefault(tid, []).append(e["reward"])
+        cases_covered.setdefault(tid, set()).add(e["case_id"])
+
+    def _percentile(data: list[float], p: float) -> float:
+        if not data:
+            return 0.0
+        data = sorted(data)
+        idx = (len(data) - 1) * p / 100
+        lo, hi = int(idx), min(int(idx) + 1, len(data) - 1)
+        return round(data[lo] + (data[hi] - data[lo]) * (idx - lo), 3)
+
+    task_metrics = {}
+    for tid, scores in by_task.items():
+        task_metrics[tid] = {
+            "count":  len(scores),
+            "avg":    round(sum(scores) / len(scores), 3),
+            "min":    round(min(scores), 3),
+            "max":    round(max(scores), 3),
+            "p25":    _percentile(scores, 25),
+            "p75":    _percentile(scores, 75),
+            "latest": round(scores[-1], 3),
+        }
+
+    # Difficulty gradient: easy tasks should score higher on average than hard tasks
+    easy_avg  = task_metrics.get("simple_triage", {}).get("avg")
+    hard_avgs = [task_metrics.get(t, {}).get("avg") for t in
+                 ("masked_deterioration", "deteriorating_patient") if t in task_metrics]
+    gradient_verified = bool(
+        easy_avg is not None and hard_avgs and
+        all(easy_avg > h for h in hard_avgs if h is not None)
+    )
+
+    return {
+        "total_episodes":            len(eps),
+        "active_sessions":           active_sessions,
+        "by_task":                   {t: task_metrics[t] for t in DIFFICULTY_ORDER if t in task_metrics},
+        "difficulty_gradient_verified": gradient_verified,
+        "cases_covered":             {t: sorted(ids) for t, ids in cases_covered.items()},
+    }
 
 
 @app.get("/state", response_model=TriageState)
@@ -525,9 +601,9 @@ async def agent_assess(request: AgentAssessRequest):
     import os, json, re
     from openai import OpenAI
 
-    api_base = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+    api_base = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
     api_key  = os.getenv("HF_TOKEN") or os.getenv("API_KEY", "")
-    model    = os.getenv("MODEL_NAME", "meta-llama/Llama-3.1-8B-Instruct")
+    model    = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
 
     if not api_key:
         # Return a helpful mock response if no LLM configured

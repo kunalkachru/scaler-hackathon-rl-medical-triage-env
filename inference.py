@@ -240,7 +240,7 @@ def main():
         ("simple_triage",       "Easy",   [0, 1]),
         ("conflicting_vitals",  "Medium", [0, 1]),
         ("masked_deterioration","Hard",   [0, 1]),
-        ("demographic_fairness","Medium", [0, 4]),   # Test 2 different demographics
+        ("demographic_fairness","Medium", [0, 1]),   # FP001 white_male + black_male — same group, enables parity scoring
         ("deteriorating_patient","Hard",  [0, 1]),   # MULTI-TURN
     ]
 

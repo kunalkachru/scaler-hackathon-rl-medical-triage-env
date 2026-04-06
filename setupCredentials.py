@@ -72,7 +72,7 @@ def main() -> None:
     api.add_space_variable(
         repo_id=repo_id,
         key="MODEL_NAME",
-        value="meta-llama/Llama-3.1-8B-Instruct",
+        value="meta-llama/Llama-3.3-70B-Instruct",
     )
 
     # Sensitive var

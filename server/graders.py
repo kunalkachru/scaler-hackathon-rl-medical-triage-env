@@ -354,7 +354,9 @@ def grade_masked_deterioration(agent_response: dict[str, Any], case: dict[str, A
 
     # 2. Masking mechanism identified (0.25)
     agent_masking = (agent_response.get("masking_drug_or_condition") or "").lower().strip()
-    true_masking = gt.get("masking_drug", gt.get("masking_condition", "")).lower()
+    true_masking = gt.get("masking_drug",
+                   gt.get("masking_condition",
+                   gt.get("masking_drug_or_condition", ""))).lower()
     masking_keywords = true_masking.split("_") + [true_masking]
     if any(kw in agent_masking for kw in masking_keywords if len(kw) > 3):
         masking_score = 1.0

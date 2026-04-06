@@ -15,7 +15,15 @@ An RL environment where an AI agent performs clinical triage on patient cases us
 
 All graders are **fully deterministic**, using the NHS NEWS2 (National Early Warning Score 2) protocol — a real, peer-reviewed clinical standard used in hospitals worldwide.
 
-For complete evaluator-facing and execution documentation (architecture, setup, deployment, UI testing steps, and validation), see:
+| | |
+|---|---|
+| **Live HF Space** | https://huggingface.co/spaces/kunalkachru23/medical_triage_env |
+| **API base URL** | https://kunalkachru23-medical-triage-env.hf.space |
+| **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
+| **Version** | v2.0.0 |
+| **Tests** | 106 passing |
+
+For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
 
 ---
@@ -36,14 +44,14 @@ Medical triage is a task humans do every day with life-or-death consequences. Tr
 ### Local (no Docker)
 
 ```bash
-git clone <your-repo>
-cd medical_triage_env
+git clone https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env.git
+cd scaler-hackathon-rl-medical-triage-env/medical_triage_env
 
 python3 -m venv venv
 source venv/bin/activate          # Linux/Mac
 # venv\Scripts\activate           # Windows
 
-pip install fastapi uvicorn pydantic openai requests
+pip install -r server/requirements.txt
 
 # Start the server
 uvicorn server.app:app --host 0.0.0.0 --port 8000
@@ -211,8 +219,8 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 
 ```python
 class TriageAction(BaseModel):
-    # All tasks
-    priority: str                          # "low" | "medium" | "high" | "critical"
+    # All tasks — null-safe: explicit null is coerced to "" giving 0 score
+    priority: Optional[str]                # "low" | "medium" | "high" | "critical"
 
     # Task 1 + 2
     news2_score: Optional[int]             # computed NEWS2 total
@@ -296,25 +304,30 @@ Task 3 (Masked Deterioration):
 | `GET` | `/state` | Episode metadata: step_count, cumulative_reward, tasks_completed. Query param: `?session_id=`. |
 | `POST` | `/grade-fairness` | Multi-variant demographic parity score. Body: `{"group_id": "FP001", "responses": {case_id: action_dict}}`. |
 | `GET` | `/tasks` | List all tasks and their case IDs |
+| `GET` | `/metrics` | Per-task score distributions, difficulty gradient verification |
+| `GET` | `/history` | All scored episodes in chronological order (training progress) |
+| `GET` | `/stats` | Per-task avg/best/count summary |
 | `GET` | `/web` | Interactive web UI |
 | `GET` | `/docs` | Auto-generated OpenAPI documentation |
+| `GET` | `/redoc` | ReDoc API documentation |
 
 ---
 
 ## Running Tests
 
 ```bash
-# All tests
+# Full suite (106 tests)
 venv/bin/python -m pytest tests/ -v
 
-# Just grader unit tests
-venv/bin/python -m pytest tests/test_graders.py -v
-
-# Just environment integration tests
-venv/bin/python -m pytest tests/test_environment.py -v
+# By module
+venv/bin/python -m pytest tests/test_graders.py -v          # 30 grader unit tests
+venv/bin/python -m pytest tests/test_environment.py -v      # 24 environment integration tests
+venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 40 v2 feature tests
+venv/bin/python -m pytest tests/test_api_contract.py -v     # 9 API contract tests
+venv/bin/python -m pytest tests/test_ui_contract.py -v      # 3 UI contract tests
 ```
 
-**Current status:** 99 tests passing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status:** 106 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 
@@ -327,60 +340,141 @@ Run pre-submit validator:
 ## Running the Baseline Inference Script
 
 ```bash
-# Set environment variables
 export API_BASE_URL="https://router.huggingface.co/v1"
-export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
+export MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
 export HF_TOKEN="your-token-here"
 
-# Run
 python inference.py
 ```
 
 The script:
-1. Starts the FastAPI server as a subprocess
-2. Runs the LLM agent against 2 cases per task (10 total)
-3. Scores each response using our graders
-4. Prints a reproducible score report
+1. Starts the FastAPI server as a subprocess on port 8000
+2. Runs the LLM agent against 2 cases per task (10 total, 5 tasks)
+3. Scores each response using our deterministic graders
+4. Runs demographic parity check on fairness task
+5. Prints a reproducible score report with bar chart
 
-**Sample baseline scores (Llama-3.1-8B-Instruct via HF Router, seed=42, 2 cases per task):**
+To run against the live HF Space instead of a local server:
+
+```bash
+export SERVER_URL="https://kunalkachru23-medical-triage-env.hf.space"
+python inference.py
+```
+
+---
+
+## Running the RL Training Loop
+
+`train.py` demonstrates that this environment supports **training**, not just evaluation. An LLM agent improves over repeated episodes by receiving reward feedback injected into the system prompt — a reward-conditioned prompting approach.
+
+```bash
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
+export HF_TOKEN="your-token-here"
+
+python train.py
+```
+
+Design: uses the **same patient case** across all repetitions of a given task so learning signal is isolated from case-difficulty variation. Feedback is task-filtered (the agent only sees its past scores on the same task type).
+
+**Sample output (Llama-3.3-70B-Instruct, 3 reps per task):**
+
+```
+  ── simple_triage  (case 0, 3 reps) ──
+    Attempt 1/3: ███████████████░░░░░  0.765
+    Attempt 2/3: ██████████████░░░░░░  0.715
+    Attempt 3/3: ████████████████░░░░  0.815
+
+  ── conflicting_vitals  (case 0, 3 reps) ──
+    Attempt 1/3: █████░░░░░░░░░░░░░░░  0.265
+    Attempt 2/3: █████████░░░░░░░░░░░  0.467
+    Attempt 3/3: █████████░░░░░░░░░░░  0.467
+
+  ── masked_deterioration  (case 0, 3 reps) ──
+    Attempt 1/3: █████████████░░░░░░░  0.675
+    Attempt 2/3: ███████████████████░  0.950
+    Attempt 3/3: ██████████████████░░  0.900
+
+  Tasks improved:  3 / 3
+```
+
+The dense per-dimension reward signal (not binary pass/fail) enables the agent to receive a meaningful learning gradient even on imperfect responses.
+
+## Multi-Model Benchmark
+
+Scores below are **empirical** — produced by running `inference.py` (2 cases per task, seed=42) against the HF Router. They provide direct evidence of the difficulty gradient and that hard tasks genuinely challenge frontier models.
+
+| Task | Difficulty | Llama-3.1-8B | Llama-3.3-70B | Δ (8B→70B) |
+|---|---|---|---|---|
+| `simple_triage` | Easy | 0.857 | 0.883 | +0.026 |
+| `conflicting_vitals` | Medium | 0.270 | 0.281 | +0.011 |
+| `masked_deterioration` | Hard | **0.475** | **0.588** | +0.113 |
+| `demographic_fairness` | Medium | 0.810 | 0.810 | 0.000 |
+| `deteriorating_patient` | Hard | 0.750 | 0.750 | 0.000 |
+| **Overall** | | **0.632** | **0.662** | |
+
+**Key observations:**
+
+1. **Difficulty gradient is real.** Simple triage (0.857–0.883) vs Masked Deterioration (0.475–0.588) — a 38–45% drop confirms hard tasks are genuinely harder, not just labelled harder.
+
+2. **Hard tasks challenge frontier models.** Even the 70B model scores only 0.588 on `masked_deterioration`. A perfect agent would score 1.0. Both models miss pharmacological masking (MD002 = 0.325 for both — the prednisolone/peritonitis case is missed by both model sizes).
+
+3. **Conflicting vitals is the steepest cliff.** Both models score ~0.27, despite it being labelled "medium". Clinical reasoning that resists misleading normals is harder than scale alone can fix.
+
+4. **Demographic fairness scores identically across both models.** This is by design — the fairness task is insensitive to model scale because the bias being tested is a property of training data, not parameter count.
+
+5. **The 70B advantage appears only on masked_deterioration (+0.113).** This isolates pharmacological reasoning as the dimension where larger scale helps — a clinically meaningful result.
+
+> To reproduce: `export API_BASE_URL="https://router.huggingface.co/v1" MODEL_NAME="<model>" HF_TOKEN="<token>"` and run `python inference.py`.
+
+---
+
+**Raw output (Llama-3.3-70B-Instruct, seed=42):**
 
 ```
 ============================================================
   Medical Triage Environment v2.0 — Baseline Inference
+  Model: meta-llama/Llama-3.3-70B-Instruct
+  API:   https://router.huggingface.co/v1
 ============================================================
-  [Easy]   simple_triage
-    ST001: 1.000
-    ST002: 0.750
+  [Easy] simple_triage
+    ST001: 0.765
+    ST002: 1.000
+
   [Medium] conflicting_vitals
-    CV001: 0.350
-    CV002: 0.200
-  [Hard]   masked_deterioration
-    MD001: 0.550
-    MD002: 0.475
+    CV001: 0.265
+    CV002: 0.298
+
+  [Hard] masked_deterioration
+    MD001: 0.850
+    MD002: 0.325
+
   [Medium] demographic_fairness
-    FP001-WF: 0.810
-    FP001-BM: 0.810
-  [Hard]   deteriorating_patient
-    step 1: action='monitor'    reward=0.300  Good at T=0
-    step 2: action='escalate'   reward=1.000  Excellent at T=30
+    FP001_white_male: 0.810
+    FP001_black_male: 0.810
+
+  [Hard] deteriorating_patient
+    step 1: action='monitor'    reward=0.300  Insufficient at T=0 (admission) (score=0.30)
+    step 2: action='escalate'   reward=1.000  Excellent at T=30 min (score=1.00)
+    step 1: action='escalate'   reward=0.500  Partial at T=0 (admission) (score=0.50)
+
+  [Fairness] Running multi-variant parity check...
+    FP001: parity=0.600  breakdown={'priority_parity': 0.35, 'sign_consistency': 0.15, 'action_parity': 0.1}
+    Average parity score: 0.600
 
 ============================================================
   RESULTS SUMMARY
 ============================================================
-  simple_triage                  0.875  █████████████████░░░
-  conflicting_vitals             0.275  █████░░░░░░░░░░░░░░░░
-  masked_deterioration           0.513  ██████████░░░░░░░░░░░
-  demographic_fairness           0.810  ████████████████░░░░░
-  deteriorating_patient          1.000  ████████████████████
+  simple_triage                  0.883  █████████████████░░░
+  conflicting_vitals             0.281  █████░░░░░░░░░░░░░░░
+  masked_deterioration           0.588  ███████████░░░░░░░░░
+  demographic_fairness           0.810  ████████████████░░░░
+  deteriorating_patient          0.750  ███████████████░░░░░
 
-  Overall average:               0.695
+  Overall average:               0.662
   Cases evaluated:               10
 ============================================================
 ```
-
-> Scores may vary by model, provider, and token routing. The difficulty gradient (easy > medium > hard) is the key signal — a well-calibrated environment shows this spread. Masked Deterioration is intentionally the hardest: frontier models frequently miss pharmacological masking.
->
-> To reproduce: set `API_BASE_URL`, `MODEL_NAME`, `HF_TOKEN` and run `python inference.py`.
 
 ---
 
@@ -406,27 +500,32 @@ Any single parameter scoring 3 → triggers immediate clinical review (minimum H
 
 ```
 medical_triage_env/
-├── inference.py              ← Baseline inference script (MANDATORY, root dir)
-├── models.py                 ← Typed Pydantic models: Action, Observation, State
-├── client.py                 ← Python HTTP client for the environment
-├── openenv.yaml              ← OpenEnv manifest
-├── Dockerfile                ← Docker build for HF Spaces
+├── inference.py              ← Baseline inference script (MANDATORY — root dir, OpenAI client)
+├── train.py                  ← RL training loop (reward-conditioned prompting, 3 tasks × N reps)
+├── models.py                 ← Typed Pydantic models: TriageAction, TriageObservation, TriageState
+├── client.py                 ← Python HTTP client wrapper for programmatic use
+├── openenv.yaml              ← OpenEnv manifest (HF Space metadata + task list)
+├── Dockerfile                ← Docker build — python:3.12-slim, port 7860, HEALTHCHECK
+├── setupCredentials.py       ← Helper to configure HF Space runtime secrets/variables
 ├── __init__.py
 ├── server/
-│   ├── app.py                ← FastAPI server with all endpoints
-│   ├── medical_triage_environment.py  ← Core environment logic
+│   ├── app.py                ← FastAPI server — all endpoints + session manager + episode history
+│   ├── medical_triage_environment.py  ← Core environment state machine (reset/step/state)
 │   ├── cases.py              ← Patient case bank (28 cases across 5 tasks)
-│   ├── graders.py            ← Deterministic NEWS2-based graders
-│   ├── requirements.txt      ← Server dependencies
+│   ├── graders.py            ← Deterministic graders: NEWS2, fairness, deterioration
+│   ├── requirements.txt      ← Server dependencies (fastapi, uvicorn, pydantic, openai)
 │   └── __init__.py
 ├── tests/
-│   ├── test_graders.py       ← grader unit tests
-│   ├── test_environment.py   ← environment integration tests
-│   └── test_v2_enhancements.py ← v2 feature and task coverage tests
+│   ├── test_graders.py       ← 30 grader unit tests (NEWS2, priority distance, all tasks)
+│   ├── test_environment.py   ← 24 environment integration tests (reset/step/state/episode flows)
+│   ├── test_v2_enhancements.py ← 40 v2 feature tests (fairness, deterioration, confidence, asymmetric penalty)
+│   ├── test_api_contract.py  ← 9 API contract tests (session isolation, fairness endpoint, metrics)
+│   └── test_ui_contract.py   ← 3 UI contract tests (web interface hooks)
+├── scripts/
+│   └── pre_submit_check.sh   ← Pre-submission validation: tests → Docker build → health → reset → openenv validate
 └── docs/
-    ├── PROJECT_DOCUMENTATION.md ← Evaluator-facing end-to-end documentation
-    ├── LOW_LEVEL_DESIGN.md   ← File/symbol-level design mapping
-    └── TEST_REPORT.md        ← Exhaustive test documentation
+    ├── PROJECT_DOCUMENTATION.md ← Full evaluator runbook (architecture, setup, deployment, UI testing)
+    └── TEST_REPORT.md        ← Exhaustive test narrative with case-wise validation evidence
 ```
 
 ---
@@ -507,14 +606,11 @@ BSD 3-Clause (same as OpenEnv)
 
 ---
 
-## Recommended Submission Docs
+## Recommended Evaluation Path
 
-For hackathon evaluation, the minimum high-signal docs set is:
-- `README.md` (required, public entrypoint)
-- `docs/PROJECT_DOCUMENTATION.md` (evaluator runbook + validation flow)
+For judges and evaluators:
 
-Optional supporting appendix:
-- `docs/TEST_REPORT.md` (deep test narrative and evidence)
-
-Internal engineering reference (optional to keep local):
-- `docs/LOW_LEVEL_DESIGN.md`
+1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/medical_triage_env and click through the web UI
+2. **API smoke test** — `curl https://kunalkachru23-medical-triage-env.hf.space/health`
+3. **Full runbook** — [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md) (setup, all endpoints, UI test plan, quickstart)
+4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (106 tests, case-wise grader validation)

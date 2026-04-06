@@ -17,7 +17,7 @@ WHY THIS FILE EXISTS:
 """
 
 from typing import Any, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 # ─────────────────────────────────────────────────────────────
@@ -34,10 +34,16 @@ class TriageAction(BaseModel):
     """
 
     # Core required for all tasks
-    priority: str = Field(
+    priority: Optional[str] = Field(
         default="",
         description="Urgency classification: 'low' | 'medium' | 'high' | 'critical'"
     )
+
+    @field_validator("priority", mode="before")
+    @classmethod
+    def coerce_priority(cls, v: Any) -> str:
+        """Coerce None/null to empty string so graders receive '' and score 0."""
+        return "" if v is None else str(v)
 
     # Task 1 + 2
     news2_score: Optional[int] = Field(
@@ -280,9 +286,52 @@ class StepRequest(BaseModel):
     )
 
 
+class StepInfo(BaseModel):
+    """
+    Typed metadata returned alongside every step/reset response.
+
+    All fields are optional so that empty info={} from error paths
+    remains valid, and forward-compatible with future additions.
+    """
+    session_id:  Optional[str] = Field(
+        default=None,
+        description="Session identifier — pass this to step() and state() for correct routing"
+    )
+    episode_id:  Optional[str] = Field(
+        default=None,
+        description="Unique ID for the current episode"
+    )
+    task_id:     Optional[str] = Field(
+        default=None,
+        description="Task ID active in this episode"
+    )
+    case_id:     Optional[str] = Field(
+        default=None,
+        description="Case ID active in this episode"
+    )
+    max_steps:   Optional[int] = Field(
+        default=None,
+        description="Maximum steps allowed in this episode"
+    )
+    step_time:   Optional[str] = Field(
+        default=None,
+        description="Current timeline time-point label (deteriorating_patient only, e.g. 'T=0 (admission)')"
+    )
+    agent_action: Optional[str] = Field(
+        default=None,
+        description="The action the agent took at this step (deteriorating_patient only)"
+    )
+
+    model_config = ConfigDict(extra="allow")   # permit future fields without breaking clients
+
+    def __contains__(self, key: str) -> bool:
+        """Support 'key in info' checks — covers defined fields and extra fields."""
+        return key in self.model_dump(exclude_none=False)
+
+
 class StepResult(BaseModel):
     """Response from POST /step and POST /reset"""
     observation: TriageObservation
     reward: float = Field(ge=0.0, le=1.0, default=0.0)
     done: bool = False
-    info: dict[str, Any] = Field(default_factory=dict)
+    info: StepInfo = Field(default_factory=StepInfo)
