@@ -204,7 +204,7 @@ CONFLICTING_VITALS_CASES = [
             "consciousness": "alert"
         },
         "medications": ["sertraline"],
-        "news2_score": 3,  # RR=2, SpO2=0, BP=0, HR=1, Temp=0, AVPU=0
+        "news2_score": 4,  # RR=2, SpO2=0, BP=0, HR=2 (118 is in 111-130→2), Temp=0, AVPU=0
         "expected_priority": "medium",
         "expected_classification": "medium",
         "ground_truth": {
@@ -238,7 +238,7 @@ CONFLICTING_VITALS_CASES = [
             "consciousness": "voice"
         },
         "medications": ["morphine", "paracetamol", "enoxaparin"],
-        "news2_score": 8,  # RR=0, SpO2=0, BP=1, HR=1, Temp=2, AVPU=3
+        "news2_score": 7,  # RR=0, SpO2=0, BP=1, HR=1, Temp=2, AVPU=3 → 7 (not 8)
         "expected_priority": "high",
         "expected_classification": "high",
         "ground_truth": {
@@ -410,7 +410,7 @@ MASKED_DETERIORATION_CASES = [
             "On: sevelamer, cinacalcet, erythropoietin. Missed last two dialysis sessions. "
             "Presented with mild shortness of breath and fatigue. 'Feels a bit puffy'. "
             "Vitals: HR=78, RR=20, SpO2=96%, BP=168/104, Temp=36.8°C, Consciousness=Alert. "
-            "NEWS2=2. ECG shows tall peaked T-waves. K+ result pending."
+            "NEWS2=0. ECG shows tall peaked T-waves. K+ result pending."
         ),
         "vitals": {
             "respiratory_rate": 20,
@@ -424,7 +424,7 @@ MASKED_DETERIORATION_CASES = [
             "bilateral_oedema": True
         },
         "medications": ["sevelamer", "cinacalcet", "erythropoietin"],
-        "news2_score": 2,   # RR=0, SpO2=0, BP=0, HR=0, Temp=0, AVPU=0 — appears stable
+        "news2_score": 0,   # RR=0, SpO2=0, BP=0, HR=0, Temp=0, AVPU=0 — all normal; hyperkalaemia invisible to NEWS2
         "true_severity": "life_threatening_hyperkalaemia",
         "expected_priority": "critical",
         "expected_classification": "critical",
@@ -729,7 +729,7 @@ DETERIORATION_CASES = [
                 "correct_action": "escalate",
                 "reward_for_correct": 0.5,
                 "reward_for_monitor": 0.0,
-                "reward_for_emergency": 0.2,
+                "reward_for_emergency_response": 0.2,  # emergency_response is forward — over-cautious but ok
             },
             {
                 "time": "T=30 min",
@@ -746,7 +746,7 @@ DETERIORATION_CASES = [
                 "correct_action": "emergency_response",
                 "reward_for_correct": 1.0,
                 "reward_for_monitor": 0.0,
-                "reward_for_urgent": 0.3,    # Too slow but partial credit
+                "reward_for_escalate": 0.3,    # urgent_review/escalate is too slow but partial credit
             },
             {
                 "time": "T=60 min",
@@ -790,9 +790,9 @@ DETERIORATION_CASES = [
                            "heart_rate": 96, "temperature": 36.9, "consciousness": "alert"},
                 "news2": 1,
                 "correct_action": "escalate",
-                "reward_for_correct": 0.6,    # Must escalate on ECG/symptoms despite low NEWS2
-                "reward_for_emergency": 0.4,  # Emergency acceptable — STEMI protocol
-                "reward_for_monitor": 0.0,    # Fatal error — STEMI missed
+                "reward_for_correct": 0.6,                    # Must escalate on ECG/symptoms despite low NEWS2
+                "reward_for_emergency_response": 0.4,  # emergency_response acceptable — STEMI protocol
+                "reward_for_monitor": 0.0,                # Fatal error — STEMI missed
             },
             {
                 "time": "T=30 min",

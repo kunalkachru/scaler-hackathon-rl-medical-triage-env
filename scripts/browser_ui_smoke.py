@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass
 
 
-DEFAULT_BASE_URL = "https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space"
+DEFAULT_BASE_URL = "https://kunalkachru23-medical-triage-env.hf.space"
 
 
 @dataclass
@@ -56,19 +56,29 @@ def run(base_url: str, headless: bool = True) -> int:
             except Exception as exc:  # noqa: BLE001 - test harness
                 results.append(StepResult(name=name, ok=False, detail=str(exc)))
 
+        # Helper: click "New Patient Case" button (no id — matched by onclick)
+        def click_new_patient():
+            page.locator("button[onclick='resetEnv()']").click()
+
+        # Helper: click "Submit & Score" button (no id — matched by onclick)
+        def click_submit():
+            page.locator("button[onclick='submitAction()']").click()
+
         def open_web():
             page.goto(web_url, wait_until="domcontentloaded")
             page.wait_for_selector("#task-select")
-            page.wait_for_selector("#reset-btn")
-            # Submit button is rendered only after a patient is loaded.
-            page.wait_for_selector("#submit-btn", state="attached")
-            page.wait_for_selector("#case-select-hint")
+            # New Patient Case button must be present
+            page.wait_for_selector("button[onclick='resetEnv()']")
+            # Submit button must be attached at page load (may be hidden until case loads)
+            page.wait_for_selector("button[onclick='submitAction()']", state="attached")
+            # Episode log placeholder must be present
+            page.wait_for_selector("#episode-log")
 
         check("load-web-and-core-controls", open_web)
 
         def simple_triage_flow():
             page.select_option("#task-select", "simple_triage")
-            page.click("#reset-btn")
+            click_new_patient()
             page.wait_for_function(
                 """() => {
                     const t = document.querySelector('#patient-history')?.textContent || '';
@@ -79,7 +89,7 @@ def run(base_url: str, headless: bool = True) -> int:
             page.wait_for_function(
                 """() => (document.querySelector('#ai-status')?.textContent || '').includes('Filled by:')"""
             )
-            page.click("#submit-btn")
+            click_submit()
             page.wait_for_selector("#result-section .score-big")
             score = (page.text_content("#result-section .score-big") or "").strip()
             if not score.endswith("%"):
@@ -88,10 +98,11 @@ def run(base_url: str, headless: bool = True) -> int:
         check("simple-triage-ai-submit", simple_triage_flow)
 
         def episode_history_demarcation():
+            # After simple_triage_flow, the log should contain "Reset:" and "Step N: reward="
             page.wait_for_function(
                 """() => {
                     const txt = document.querySelector('#episode-log')?.textContent || '';
-                    return txt.includes('Episode') && (txt.includes('started') || txt.includes('final reward'));
+                    return txt.includes('Reset:') || txt.includes('Step ') || txt.includes('reward=');
                 }"""
             )
 
@@ -99,11 +110,11 @@ def run(base_url: str, headless: bool = True) -> int:
 
         def task_switch_clears_form():
             page.select_option("#task-select", "deteriorating_patient")
-            page.click("#reset-btn")
+            click_new_patient()
             page.wait_for_selector("#btn-monitor")
             # Switch to a non-deteriorating task and verify old action buttons disappear.
             page.select_option("#task-select", "masked_deterioration")
-            page.click("#reset-btn")
+            click_new_patient()
             page.wait_for_selector("#f-priority")
             if page.locator("#btn-monitor").count() != 0:
                 raise AssertionError("Deteriorating action buttons leaked into non-deteriorating form.")
@@ -112,15 +123,15 @@ def run(base_url: str, headless: bool = True) -> int:
 
         def deteriorating_multiturn_flow():
             page.select_option("#task-select", "deteriorating_patient")
-            page.click("#reset-btn")
+            click_new_patient()
             page.wait_for_selector("#btn-monitor")
             page.click("#btn-monitor")
-            page.click("#submit-btn")
+            click_submit()
             # Either done immediately (some case/action combos) or continue prompt appears.
             continued = page.locator("text=Episode continues").count() > 0
             if continued:
                 page.click("#btn-escalate")
-                page.click("#submit-btn")
+                click_submit()
             page.wait_for_selector("#result-section .score-big")
 
         check("deteriorating-multiturn", deteriorating_multiturn_flow)
@@ -128,14 +139,15 @@ def run(base_url: str, headless: bool = True) -> int:
         def training_tab_state():
             page.click("#tab-training")
             page.wait_for_selector("#panel-training")
-            page.click("text=Refresh")
+            page.locator("button[onclick='loadTrainingData()']").click()
             # Accept either empty-state or populated stats.
             page.wait_for_function(
                 """() => {
                     const hint = document.querySelector('#training-empty-hint');
                     const ep = document.querySelector('#stat-episodes');
-                    if (!hint || !ep) return false;
-                    return hint.style.display !== 'none' || (ep.textContent || '').trim().length > 0;
+                    if (!ep) return false;
+                    if (hint) return hint.style.display !== 'none' || (ep.textContent || '').trim().length > 0;
+                    return (ep.textContent || '').trim().length > 0;
                 }"""
             )
 

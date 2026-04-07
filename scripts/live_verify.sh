@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space}"
+BASE_URL="${BASE_URL:-https://kunalkachru23-medical-triage-env.hf.space}"
 EXPECT_LLM="${EXPECT_LLM:-true}"
 SESSION_ID="live-verify-$(date +%s)"
 

@@ -192,6 +192,20 @@ def wait_for_server(url: str, retries: int = 30) -> bool:
     return False
 
 
+def _get_case_id(server_url: str, task_id: str, case_index: int) -> str:
+    """Fetch case_id from the /tasks API — avoids importing server internals."""
+    try:
+        resp = req.get(f"{server_url}/tasks", timeout=5)
+        if resp.status_code == 200:
+            task_data = resp.json().get(task_id, {})
+            case_ids = task_data.get("case_ids", [])
+            if 0 <= case_index < len(case_ids):
+                return case_ids[case_index]
+    except Exception:
+        pass
+    return f"case_{case_index}"
+
+
 def _validate_required_env() -> list[str]:
     missing = []
     if not API_BASE_URL:
@@ -262,16 +276,11 @@ def main():
             total_score += reward
             total_cases += 1
 
-            from server.cases import CASE_BANK
-            try:
-                case = CASE_BANK[task_id][ci]
-                case_id = case["case_id"]
-            except Exception:
-                case_id = f"case_{ci}"
-                case = {}
+            # Look up case_id via the /tasks API — no server import needed
+            case_id = _get_case_id(server_url, task_id, ci)
 
             # Collect action for fairness parity scoring
-            if task_id == "demographic_fairness" and case and action_dict:
+            if task_id == "demographic_fairness" and action_dict:
                 # group_id is the first 5 chars of case_id (e.g. "FP001")
                 group_id = case_id[:5]
                 if group_id not in fairness_responses:

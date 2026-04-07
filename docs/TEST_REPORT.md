@@ -4,7 +4,7 @@
 **Environment:** Medical Triage Environment v2.0.0  
 **Python:** 3.12.3 | **pytest:** 9.0.2  
 **Core Suite Tests:** 103 | **Passed:** 103 | **Failed:** 0  
-**Current Full Suite Status:** 111 passed (`pytest tests/ -q`)  
+**Current Full Suite Status:** 116 passed (`pytest tests/ -q`)  
 **Core Suite Run time:** ~0.4s  
 
 > Note: This report is a deep-dive narrative for foundational grader/environment suites.  
@@ -15,7 +15,7 @@
 ## How to Run
 
 ```bash
-# From project root (full suite — 111 tests)
+# From project root (full suite — 116 tests)
 pytest tests/ -q
 
 # Core grader + environment suites only
@@ -172,7 +172,9 @@ vitals = {
 | 2 | Yes | `low` |
 | 3 | Yes | `medium` |
 | 6 | Yes | `high` (5–6 = urgent per NHS) |
-| 7 | Yes | `critical` |
+| 7 | No haemodynamic flag | `high` |
+| 7 | BP or HR scores 3 | `critical` |
+| 9 | Any | `critical` |
 
 **Actual:** All correct  
 **Status:** ✅ PASS  
@@ -877,11 +879,11 @@ v2 task descriptions present ✅
 ## Final Summary (v2)
 
 ```
-111 tests passed | 0 failed | 0 skipped
-Run time: ~0.20s
+116 tests passed | 0 failed | 0 skipped
+Run time: ~0.23s
 
 v2 includes 5 tasks and additional API contract tests; detailed per-test sections below retain original sequencing.
-v2 (40 tests): 4 enhancements — asymmetric penalty, fairness, multi-turn, confidence
+v2 (45 tests): 4 enhancements — asymmetric penalty, fairness, multi-turn, confidence + 5 regression tests (dead reward keys, news2_score values)
 
 All OpenEnv spec requirements verified ✅
 All 5 tasks reachable and functional ✅
@@ -896,7 +898,7 @@ Under-triage correctly penalized harder than over-triage ✅
 ## Final Verification Evidence (Submission Gate)
 
 Local validation gates:
-- `pytest tests/ -q` → 111 passed
+- `pytest tests/ -q` → 116 passed
 - `openenv validate` → `[OK] Ready for multi-mode deployment`
 - `./scripts/pre_submit_check.sh` → all checks passed
 

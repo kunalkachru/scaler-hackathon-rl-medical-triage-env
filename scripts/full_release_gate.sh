@@ -21,7 +21,7 @@ set -o errtrace
 #   --skip-playwright-install  Skip auto-install of playwright/chromium
 #   --expect-llm <true|false>  Whether live_verify should expect llm_used=true
 
-BASE_URL="https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space"
+BASE_URL="https://kunalkachru23-medical-triage-env.hf.space"
 REPO_ID="kunalkachru23/scaler-hackathon-rl-medical-triage-env"
 EXPECT_LLM="true"
 SKIP_DEPLOY="false"

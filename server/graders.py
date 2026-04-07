@@ -121,11 +121,27 @@ def compute_news2(vitals: dict[str, Any]) -> tuple[int, dict[str, int]]:
 def news2_to_priority(news2_score: int, individual_scores: dict[str, int]) -> str:
     """
     Convert NEWS2 total to clinical priority level.
-    Rule: any single parameter score of 3 = at least 'medium' urgency.
+
+    Thresholds (aligned with NHS NEWS2 protocol and case ground truth):
+      critical : NEWS2 ≥ 9, OR NEWS2 ≥ 7 with a haemodynamic red flag
+                 (systolic_bp or heart_rate scoring 3 — indicates cardiovascular collapse)
+      high     : NEWS2 ≥ 5, OR any single parameter scores 3
+                 (single-parameter red flag warrants urgent clinical review)
+      medium   : NEWS2 ≥ 3
+      low      : NEWS2 0–2, no red flags
+
+    Rationale: NHS NEWS2 uses "High" for ≥7 (not "critical"). This 4-level scheme
+    adds "critical" to differentiate haemodynamic collapse (BP/HR=3, or total ≥9)
+    from serious but not immediately life-threatening presentations (total 7–8,
+    consciousness or respiratory red flag only).
     """
     has_red_flag = any(v == 3 for v in individual_scores.values())
+    has_haemodynamic_red_flag = (
+        individual_scores.get("systolic_bp", 0) == 3 or
+        individual_scores.get("heart_rate", 0) == 3
+    )
 
-    if news2_score >= 7:
+    if news2_score >= 9 or (news2_score >= 7 and has_haemodynamic_red_flag):
         return "critical"
     elif news2_score >= 5 or has_red_flag:
         return "high"

@@ -17,11 +17,11 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 
 | | |
 |---|---|
-| **Live HF Space** | https://huggingface.co/spaces/kunalkachru23/scaler-hackathon-rl-medical-triage-env |
-| **API base URL** | https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space |
+| **Live HF Space** | https://huggingface.co/spaces/kunalkachru23/medical-triage-env |
+| **API base URL** | https://kunalkachru23-medical-triage-env.hf.space |
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
 | **Version** | v2.0.0 |
-| **Tests** | 111 passing |
+| **Tests** | 116 passing |
 
 For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
@@ -45,7 +45,7 @@ Medical triage is a task humans do every day with life-or-death consequences. Tr
 
 ```bash
 git clone https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env.git
-cd scaler-hackathon-rl-medical-triage-env
+cd medical-triage-env
 
 python3 -m venv venv
 source venv/bin/activate          # Linux/Mac
@@ -316,18 +316,18 @@ Task 3 (Masked Deterioration):
 ## Running Tests
 
 ```bash
-# Full suite (111 tests)
+# Full suite (116 tests)
 venv/bin/python -m pytest tests/ -v
 
 # By module
 venv/bin/python -m pytest tests/test_graders.py -v          # 30 grader unit tests
 venv/bin/python -m pytest tests/test_environment.py -v      # 24 environment integration tests
-venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 40 v2 feature tests
+venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 45 v2 feature tests (inc. 5 regression)
 venv/bin/python -m pytest tests/test_api_contract.py -v     # 9 API contract tests
 venv/bin/python -m pytest tests/test_ui_contract.py -v      # 8 UI contract tests
 ```
 
-**Current status:** 111 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status:** 116 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 
@@ -415,7 +415,7 @@ The script:
 To run against the live HF Space instead of a local server:
 
 ```bash
-export SERVER_URL="https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space"
+export SERVER_URL="https://kunalkachru23-medical-triage-env.hf.space"
 python inference.py
 ```
 
@@ -438,7 +438,7 @@ python setupCredentials.py
 Quick verification after restart:
 
 ```bash
-curl -X POST "https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/suggest" \
+curl -X POST "https://kunalkachru23-medical-triage-env.hf.space/suggest" \
   -H "content-type: application/json" \
   -d '{"patient_history":"RR=24 SpO2=93 BP=105/70 HR=112 Temp=38.4 Consciousness=Alert","task_id":"simple_triage"}'
 ```
@@ -575,7 +575,8 @@ The NEWS2 (National Early Warning Score 2) is validated by the UK Royal College 
 | Temperature | ≤35.0 | | 35.1–36.0 | 36.1–38.0 | 38.1–39.0 | ≥39.1 | |
 | Consciousness | | | | Alert | | | Voice/Pain/Unresponsive |
 
-**Score → Priority:** 0–2 = Low · 3–4 = Medium · 5–6 = High · ≥7 = Critical  
+**Score → Priority:** 0–2 = Low · 3–4 = Medium · 5–6 = High · ≥9 = Critical  
+≥7 with haemodynamic red flag (BP or HR scoring 3) → Critical; otherwise → High.  
 Any single parameter scoring 3 → triggers immediate clinical review (minimum High).
 
 ---
@@ -583,7 +584,7 @@ Any single parameter scoring 3 → triggers immediate clinical review (minimum H
 ## Project Structure
 
 ```
-scaler-hackathon-rl-medical-triage-env/
+medical-triage-env/
 ├── inference.py              ← Baseline inference script (MANDATORY — root dir, OpenAI client)
 ├── train.py                  ← RL training loop (reward-conditioned prompting, 3 tasks × N reps)
 ├── models.py                 ← Typed Pydantic models: TriageAction, TriageObservation, TriageState
@@ -697,7 +698,7 @@ BSD 3-Clause (same as OpenEnv)
 
 For judges and evaluators:
 
-1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/scaler-hackathon-rl-medical-triage-env and click through the web UI
-2. **API smoke test** — `curl https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/health`
+1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/medical-triage-env and click through the web UI
+2. **API smoke test** — `curl https://kunalkachru23-medical-triage-env.hf.space/health`
 3. **Full runbook** — [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md) (setup, all endpoints, UI test plan, quickstart)
-4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (111 tests, case-wise grader validation)
+4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (116 tests, case-wise grader validation)

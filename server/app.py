@@ -914,7 +914,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
       <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:600px;margin-left:auto;margin-right:auto">
         <div class="card"><div style="font-size:20px">5</div><div style="font-size:11px;color:var(--muted)">Tasks</div></div>
         <div class="card"><div style="font-size:20px">28</div><div style="font-size:11px;color:var(--muted)">Patient Cases</div></div>
-        <div class="card"><div style="font-size:20px">111</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
+        <div class="card"><div style="font-size:20px">116</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
       </div>
     </div>
 

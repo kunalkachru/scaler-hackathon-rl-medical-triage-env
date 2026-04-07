@@ -286,6 +286,67 @@ class TestDeterioratingPatientGrader:
             assert 0.0 <= score <= 1.0, f"DT002 step {i}: score {score} out of range"
             assert score > 0, f"DT002 step {i}: correct action should score > 0"
 
+    def test_dt002_t0_emergency_response_gets_partial_credit(self):
+        """
+        DT002 T=0: emergency_response should get 0.2 (forward-cautious).
+        Regression test for dead-key bug where reward_for_emergency was unreachable.
+        """
+        case = DETERIORATION_CASES[1]   # DT002
+        entry = case["timeline"][0]     # T=0
+        assert entry["correct_action"] == "escalate"
+        response = {"action": "emergency_response"}
+        score, _ = grade_deteriorating_patient_step(response, entry, 0, case)
+        assert score == 0.2, (
+            f"DT002 T=0 emergency_response should score 0.2 (reward_for_emergency_response), got {score}. "
+            f"Previously dead key 'reward_for_emergency' returned 0.0."
+        )
+
+    def test_dt002_t30_escalate_gets_partial_credit(self):
+        """
+        DT002 T=30: escalate (urgent_review) should get 0.3 (too slow but partial).
+        Regression test for dead-key bug where reward_for_urgent was unreachable
+        because urgent_review canonicalizes to 'escalate' → reward_for_escalate key.
+        """
+        case = DETERIORATION_CASES[1]   # DT002
+        entry = case["timeline"][1]     # T=30
+        assert entry["correct_action"] == "emergency_response"
+        for action in ["escalate", "urgent_review"]:
+            score, _ = grade_deteriorating_patient_step({"action": action}, entry, 1, case)
+            assert score == 0.3, (
+                f"DT002 T=30 {action!r} should score 0.3 (reward_for_escalate), got {score}. "
+                f"Previously dead key 'reward_for_urgent' returned 0.0."
+            )
+
+    def test_dt003_t0_emergency_response_gets_partial_credit(self):
+        """
+        DT003 T=0 (STEMI): emergency_response should score 0.4 — clinically valid.
+        Regression test for dead-key bug where reward_for_emergency was unreachable.
+        """
+        case = DETERIORATION_CASES[2]   # DT003
+        entry = case["timeline"][0]     # T=0
+        assert entry["correct_action"] == "escalate"
+        response = {"action": "emergency_response"}
+        score, _ = grade_deteriorating_patient_step(response, entry, 0, case)
+        assert score == 0.4, (
+            f"DT003 T=0 emergency_response (STEMI) should score 0.4, got {score}. "
+            f"Previously dead key 'reward_for_emergency' returned 0.0."
+        )
+
+    def test_case_news2_scores_match_computed(self):
+        """
+        Stored news2_score in case data must match what compute_news2() returns.
+        Regression test for CV002 (was 3, should be 4) and CV003 (was 8, should be 7).
+        """
+        from server.graders import compute_news2
+        from server.cases import CONFLICTING_VITALS_CASES
+        for case in CONFLICTING_VITALS_CASES:
+            computed, _ = compute_news2(case["vitals"])
+            assert computed == case["news2_score"], (
+                f"{case['case_id']}: stored news2_score={case['news2_score']} "
+                f"but compute_news2() returns {computed}. "
+                f"Stored value must match actual vitals."
+            )
+
 
 class TestDeterioratingPatientEnvironment:
     """Integration tests for multi-turn deterioration episodes via the environment."""

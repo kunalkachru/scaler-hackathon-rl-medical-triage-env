@@ -39,10 +39,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 # Expose port declared in openenv.yaml
 EXPOSE 7860
 
-# Environment variables (can be overridden at runtime)
-ENV API_BASE_URL=""
-ENV MODEL_NAME=""
-ENV HF_TOKEN=""
+# Non-sensitive defaults (HF_TOKEN/API_BASE_URL/MODEL_NAME injected by HF Spaces secrets at runtime)
 ENV ENABLE_WEB_INTERFACE=true
 
 # Run the FastAPI server

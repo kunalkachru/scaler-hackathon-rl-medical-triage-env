@@ -94,23 +94,42 @@ class TestNEWS2Computation:
                 f"Consciousness='{val}': expected {expected}, got {breakdown['consciousness']}"
 
     def test_news2_to_priority_thresholds(self):
-        """NEWS2 → priority conversion at key thresholds."""
-        # All individual scores 0 (no red flags)
+        """NEWS2 → priority conversion at key thresholds (no red flags)."""
         flat_scores = {"respiratory_rate": 0, "spo2": 0, "systolic_bp": 0,
                       "heart_rate": 0, "temperature": 0, "consciousness": 0}
         assert news2_to_priority(0, flat_scores) == "low"
         assert news2_to_priority(2, flat_scores) == "low"
         assert news2_to_priority(3, flat_scores) == "medium"
-        assert news2_to_priority(6, flat_scores) == "high"   # 5-6 = high per NHS NEWS2
-        assert news2_to_priority(7, flat_scores) == "critical"
+        assert news2_to_priority(6, flat_scores) == "high"
+        # NEWS2 7-8 with no haemodynamic red flag = "high" (not "critical")
+        # Consistent with ST001 (NEWS2=8, no BP/HR=3, expected="high")
+        assert news2_to_priority(7, flat_scores) == "high"
+        assert news2_to_priority(8, flat_scores) == "high"
+        # NEWS2 ≥ 9 always = "critical"
+        assert news2_to_priority(9, flat_scores) == "critical"
+        assert news2_to_priority(12, flat_scores) == "critical"
+
+    def test_news2_to_priority_haemodynamic_red_flag(self):
+        """NEWS2 ≥ 7 WITH a haemodynamic red flag (BP or HR=3) = critical."""
+        # BP=3 (systolic ≤ 90) — haemodynamic collapse
+        bp_red_flag = {"respiratory_rate": 2, "spo2": 1, "systolic_bp": 3,
+                       "heart_rate": 2, "temperature": 0, "consciousness": 0}
+        # Total = 8, has haemodynamic red flag → "critical"
+        assert news2_to_priority(8, bp_red_flag) == "critical"
+        # Consistent with ST003 (NEWS2=8, BP=88→3, expected="critical")
 
     def test_red_flag_overrides_total(self):
-        """A single parameter score of 3 should trigger at least 'high'."""
-        red_flag_scores = {"respiratory_rate": 3, "spo2": 0, "systolic_bp": 0,
-                          "heart_rate": 0, "temperature": 0, "consciousness": 0}
-        result = news2_to_priority(3, red_flag_scores)
-        assert result in ("high", "critical"), \
-            f"Red flag should give high/critical, got {result}"
+        """Any single parameter score of 3 should trigger at least 'high'."""
+        # AVPU=3 (consciousness) — not a haemodynamic flag — gives "high" not "critical"
+        avpu_red_flag = {"respiratory_rate": 0, "spo2": 0, "systolic_bp": 0,
+                        "heart_rate": 0, "temperature": 0, "consciousness": 3}
+        result_low_news2 = news2_to_priority(3, avpu_red_flag)
+        assert result_low_news2 in ("high", "critical"), \
+            f"AVPU red flag at low NEWS2 should give high/critical, got {result_low_news2}"
+        # CV003 pattern: NEWS2=7, AVPU=3 (not haemodynamic) → "high"
+        result_news2_7 = news2_to_priority(7, avpu_red_flag)
+        assert result_news2_7 == "high", \
+            f"NEWS2=7 with AVPU red flag only (no haemodynamic collapse) should be 'high', got {result_news2_7}"
 
 
 class TestPriorityDistance:
