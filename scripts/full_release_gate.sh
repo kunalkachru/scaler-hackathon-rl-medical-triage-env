@@ -22,7 +22,7 @@ set -o errtrace
 #   --expect-llm <true|false>  Whether live_verify should expect llm_used=true
 
 BASE_URL="https://kunalkachru23-medical-triage-env.hf.space"
-REPO_ID="kunalkachru23/scaler-hackathon-rl-medical-triage-env"
+REPO_ID="kunalkachru23/medical-triage-env"
 EXPECT_LLM="true"
 SKIP_DEPLOY="false"
 SKIP_PLAYWRIGHT_INSTALL="false"
