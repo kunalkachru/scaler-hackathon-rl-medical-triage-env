@@ -13,6 +13,7 @@ __pycache__/
 .env
 *.log
 .cursor/
+CLAUDE.md
 
 # Local-only internal engineering notes (optional for submission)
 # docs/LOW_LEVEL_DESIGN.md

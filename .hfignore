@@ -17,6 +17,7 @@ build/
 *.log
 outputs/
 .cursor/
+CLAUDE.md
 
 # docs/EDUCATIONAL_DEEP_DIVE_LOCAL.md
 docs/LOW_LEVEL_DESIGN.md
