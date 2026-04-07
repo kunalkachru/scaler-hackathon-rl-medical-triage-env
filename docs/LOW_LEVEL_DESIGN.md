@@ -274,7 +274,7 @@ Functional content:
 ### 4.12 Validation and test harness files
 
 `scripts/pre_submit_check.sh`:
-- runs full pytest (106 tests)
+- runs full pytest (110 tests)
 - builds Docker image
 - checks container health
 - smoke-tests `/reset`
@@ -296,11 +296,11 @@ Functional content:
 - API parsing/contract checks for newer action fields.
 - requires live server on localhost:8000.
 
-`tests/test_ui_contract.py` (3 tests):
-- UI DOM contract and wiring checks for core interactive hooks.
+`tests/test_ui_contract.py` (7 tests):
+- UI DOM contract, session wiring, and UI regression guards for interactive hooks.
 - requires live server on localhost:8000.
 
-**Total: 106 tests — all passing.**
+**Total: 110 tests — all passing.**
 
 ## 5) Cross-File Dependency Map
 

@@ -742,7 +742,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
 .error{background:#2d0f0f;border:1px solid #5a1a1a;border-radius:8px;padding:10px;color:#e05c5c;font-size:12px;margin-top:8px}
 .loading{text-align:center;padding:20px;color:var(--muted);animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
-#episode-log{max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:monospace;font-size:11px;color:var(--muted);margin-top:8px}
+#episode-log{max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:monospace;font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -913,7 +913,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
       <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:600px;margin-left:auto;margin-right:auto">
         <div class="card"><div style="font-size:20px">5</div><div style="font-size:11px;color:var(--muted)">Tasks</div></div>
         <div class="card"><div style="font-size:20px">28</div><div style="font-size:11px;color:var(--muted)">Patient Cases</div></div>
-        <div class="card"><div style="font-size:20px">106</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
+        <div class="card"><div style="font-size:20px">110</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
       </div>
     </div>
 
@@ -926,6 +926,9 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
         <div class="card" style="text-align:center"><div style="font-size:24px;font-weight:700;color:#5cb85c" id="stat-avg">—</div><div style="font-size:11px;color:var(--muted)">Overall Avg Score</div></div>
         <div class="card" style="text-align:center"><div style="font-size:24px;font-weight:700;color:#f0ad4e" id="stat-best">—</div><div style="font-size:11px;color:var(--muted)">Best Score</div></div>
         <div class="card" style="text-align:center"><div style="font-size:24px;font-weight:700;color:#6ab0f5" id="stat-tasks">0</div><div style="font-size:11px;color:var(--muted)">Tasks Attempted</div></div>
+      </div>
+      <div id="training-empty-hint" style="display:none;margin:-6px 0 12px;padding:10px;background:var(--surface);border:1px dashed var(--border);border-radius:8px;font-size:12px;color:var(--muted)">
+        No completed episodes yet. Run at least one case on the Triage tab, then return here to view learning curves and task-wise metrics.
       </div>
 
       <div class="card" style="margin-bottom:14px">
@@ -972,7 +975,8 @@ let state = {task_id:null, case_id:null, episode_id:null, session_id:null, step:
 
 function log(msg) {
   const el = document.getElementById("episode-log");
-  el.innerHTML += `<div>${new Date().toLocaleTimeString()} ${msg}</div>`;
+  const line = `${new Date().toLocaleTimeString()} ${msg}`;
+  el.innerHTML += `<div title="${line.replace(/"/g,'&quot;')}">${line}</div>`;
   el.scrollTop = el.scrollHeight;
 }
 
@@ -1006,6 +1010,11 @@ async function populateCaseSelect() {
 }
 
 async function onTaskSelectionChange() {
+  // Clear stale form state immediately when switching task families.
+  document.getElementById("response-form").innerHTML = "";
+  document.getElementById("result-section").innerHTML = "";
+  window._selectedAction = "";
+  window._calc = null;
   updateTaskInfo();
   await populateCaseSelect();
 }
@@ -1310,10 +1319,13 @@ async function loadTrainingData() {
 }
 
 function renderStats(stats) {
-  document.getElementById('stat-episodes').textContent = stats.total_episodes || 0;
+  const totalEpisodes = stats.total_episodes || 0;
+  document.getElementById('stat-episodes').textContent = totalEpisodes;
   document.getElementById('stat-avg').textContent = stats.overall_avg != null ? stats.overall_avg.toFixed(3) : '—';
   document.getElementById('stat-best').textContent = stats.best_score != null ? stats.best_score.toFixed(3) : '—';
   document.getElementById('stat-tasks').textContent = Object.keys(stats.by_task || {}).length;
+  const hint = document.getElementById('training-empty-hint');
+  if (hint) hint.style.display = totalEpisodes > 0 ? 'none' : 'block';
 }
 
 function renderLearningCurve(episodes) {

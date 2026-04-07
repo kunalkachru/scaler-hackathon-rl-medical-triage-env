@@ -2,10 +2,10 @@
 
 **Version:** v2.0.0  
 **Team:** Team Falcons — Scaler × Meta PyTorch OpenEnv Hackathon 2026  
-**Live Space:** https://huggingface.co/spaces/kunalkachru23/medical_triage_env  
-**API URL:** https://kunalkachru23-medical-triage-env.hf.space  
+**Live Space:** https://huggingface.co/spaces/kunalkachru23/scaler-hackathon-rl-medical-triage-env  
+**API URL:** https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space  
 **GitHub:** https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env  
-**Tests:** 106 passing, 0 failing
+**Tests:** 110 passing, 0 failing
 
 ---
 
@@ -56,7 +56,7 @@ GET  /health  → 200 {"status":"healthy"}
 ### 3.1 Project Structure
 
 ```
-medical_triage_env/
+scaler-hackathon-rl-medical-triage-env/
 ├── inference.py              ← Mandatory baseline script (OpenAI client, env vars)
 ├── train.py                  ← RL training loop (reward-conditioned prompting)
 ├── models.py                 ← Typed Pydantic models: TriageAction, TriageObservation, TriageState
@@ -284,7 +284,7 @@ Configure Space runtime vars via the `setupCredentials.py` helper:
 
 ```bash
 export HF_TOKEN="<admin-token>"
-export SPACE_REPO_ID="kunalkachru23/medical_triage_env"
+export SPACE_REPO_ID="kunalkachru23/scaler-hackathon-rl-medical-triage-env"
 export INFERENCE_HF_TOKEN="<inference-token>"
 python setupCredentials.py
 ```
@@ -299,7 +299,7 @@ Or set manually in HF Space Settings → Variables and Secrets.
 
 ```bash
 git clone https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env.git
-cd scaler-hackathon-rl-medical-triage-env/medical_triage_env
+cd scaler-hackathon-rl-medical-triage-env
 
 python3 -m venv venv
 source venv/bin/activate     # Linux/Mac
@@ -331,12 +331,12 @@ curl http://localhost:7860/health
 ### 7.3 Deployed HF Space
 
 The environment is live at:
-- Space: https://huggingface.co/spaces/kunalkachru23/medical_triage_env
-- API: https://kunalkachru23-medical-triage-env.hf.space
+- Space: https://huggingface.co/spaces/kunalkachru23/scaler-hackathon-rl-medical-triage-env
+- API: https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space
 
 ```bash
-curl https://kunalkachru23-medical-triage-env.hf.space/health
-curl -X POST https://kunalkachru23-medical-triage-env.hf.space/reset \
+curl https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/health
+curl -X POST https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/reset \
   -H "content-type: application/json" \
   -d '{"task_id":"simple_triage","case_index":0,"seed":42}'
 ```
@@ -356,7 +356,7 @@ export HF_TOKEN="<your-token>"
 python inference.py
 
 # Against live HF Space
-SERVER_URL="https://kunalkachru23-medical-triage-env.hf.space" python inference.py
+SERVER_URL="https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space" python inference.py
 ```
 
 Runs 2 cases per task (10 total), prints score report with difficulty gradient.
@@ -381,19 +381,19 @@ Demonstrates the environment supports training, not just evaluation:
 
 ## 9. Testing and Validation
 
-### 9.1 Test Suite (106 tests)
+### 9.1 Test Suite (110 tests)
 
 ```bash
 # Full suite
 pytest tests/ -q
-# → 106 passed in ~0.3s
+# → 110 passed in ~0.3s
 
 # By module
 pytest tests/test_graders.py -v           # 30 tests — NEWS2, priority distance, all task graders
 pytest tests/test_environment.py -v       # 24 tests — reset/step/state/episode flows
 pytest tests/test_v2_enhancements.py -v   # 40 tests — fairness, deterioration, confidence, asymmetric
 pytest tests/test_api_contract.py -v      # 9 tests  — session isolation, fairness endpoint, metrics
-pytest tests/test_ui_contract.py -v       # 3 tests  — web UI hooks and task endpoint contracts
+pytest tests/test_ui_contract.py -v       # 7 tests  — web UI hooks and UI regression guards
 ```
 
 **Test coverage:**
@@ -404,7 +404,7 @@ pytest tests/test_ui_contract.py -v       # 3 tests  — web UI hooks and task e
 | `test_environment.py` | 24 | reset/step/state contracts, full episode flows, multi-episode independence |
 | `test_v2_enhancements.py` | 40 | Asymmetric penalty, fairness grader, deterioration multi-turn, confidence calibration, all-5-tasks integration |
 | `test_api_contract.py` | 9 | Session isolation, grade-fairness endpoint, metrics structure, step preserves fields |
-| `test_ui_contract.py` | 3 | Web UI HTML contains required elements, tasks endpoint structure |
+| `test_ui_contract.py` | 7 | Web UI HTML contract, session wiring, empty-state and task-switch regression guards |
 
 ### 9.2 Pre-Submission Validation Gate
 
@@ -413,7 +413,7 @@ pytest tests/test_ui_contract.py -v       # 3 tests  — web UI hooks and task e
 ```
 
 Pipeline (5 steps):
-1. Full test suite (106 tests must pass)
+1. Full test suite (110 tests must pass)
 2. Docker build
 3. Container health check on port 7860
 4. Reset endpoint smoke check
@@ -442,7 +442,7 @@ The `/step` endpoint is hardened against unexpected agent inputs (relevant for P
 
 | Environment | URL |
 |---|---|
-| Live HF Space | https://kunalkachru23-medical-triage-env.hf.space/web |
+| Live HF Space | https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/web |
 | Local | http://localhost:8000/web |
 | Docker | http://localhost:7860/web |
 
@@ -489,7 +489,7 @@ The `/step` endpoint is hardened against unexpected agent inputs (relevant for P
 
 ### 10.4 AI Auto-fill
 
-Click **Auto-fill with AI** in the UI to have the environment's built-in rule-based helper suggest a response. The suggestion is pre-populated in the form fields but not submitted — you must click **Submit & Score** to record it.
+Click **Auto-fill with AI** in the UI to request a model-generated suggestion. If `API_BASE_URL`, `MODEL_NAME`, and `HF_TOKEN` are configured, the app uses the live LLM path; otherwise it falls back to a deterministic rule-based suggestion. The suggestion is pre-populated in the form fields but not submitted — you must click **Submit & Score** to record it.
 
 ---
 
@@ -498,26 +498,29 @@ Click **Auto-fill with AI** in the UI to have the environment's built-in rule-ba
 ### 11.1 Deploy to HF Space
 
 ```bash
-cd medical_triage_env
+cd scaler-hackathon-rl-medical-triage-env
 openenv push
 ```
 
-This validates the project, creates/updates the Space at `kunalkachru23/medical_triage_env`, uploads all files, and confirms deployment. The Space uses `sdk: docker` and `app_port: 7860` as declared in `openenv.yaml`.
+This validates the project, creates/updates the Space at `kunalkachru23/scaler-hackathon-rl-medical-triage-env`, uploads all files, and confirms deployment. The Space uses `sdk: docker` and `app_port: 7860` as declared in `openenv.yaml`.
 
 ### 11.2 Verify Deployed Space
 
 ```bash
 # Health
-curl https://kunalkachru23-medical-triage-env.hf.space/health
+curl https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/health
 
 # Reset
-curl -X POST https://kunalkachru23-medical-triage-env.hf.space/reset \
+curl -X POST https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/reset \
   -H "content-type: application/json" \
   -d '{"task_id":"simple_triage","case_index":0,"seed":42}'
 
 # openenv validate (static)
 openenv validate .
 # → [OK] medical_triage: Ready for multi-mode deployment
+
+# full live deployment API pack
+./scripts/live_verify.sh
 ```
 
 ### 11.3 Post-Deploy Configuration
@@ -588,13 +591,13 @@ openenv validate .
 **Step 2 — Run tests:**
 ```bash
 pytest tests/ -q
-# Expected: 106 passed
+# Expected: 110 passed
 ```
 
 **Step 3 — Test the live Space:**
 ```bash
-curl https://kunalkachru23-medical-triage-env.hf.space/health
-curl -X POST https://kunalkachru23-medical-triage-env.hf.space/reset \
+curl https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/health
+curl -X POST https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/reset \
   -H "content-type: application/json" -d '{"task_id":"simple_triage","case_index":0}'
 ```
 
@@ -612,8 +615,8 @@ python train.py
 ```
 
 **Step 6 — Open the web UI:**
-- Live: https://kunalkachru23-medical-triage-env.hf.space/web
+- Live: https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/web
 - Try `simple_triage` (easy) and `deteriorating_patient` (hard multi-turn)
 
 **Step 7 — Explore the API docs:**
-- https://kunalkachru23-medical-triage-env.hf.space/docs
+- https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/docs

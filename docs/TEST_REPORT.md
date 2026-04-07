@@ -4,7 +4,7 @@
 **Environment:** Medical Triage Environment v2.0.0  
 **Python:** 3.12.3 | **pytest:** 9.0.2  
 **Core Suite Tests:** 103 | **Passed:** 103 | **Failed:** 0  
-**Current Full Suite Status:** 106 passed (`pytest tests/ -q`)  
+**Current Full Suite Status:** 110 passed (`pytest tests/ -q`)  
 **Core Suite Run time:** ~0.4s  
 
 > Note: This report is a deep-dive narrative for foundational grader/environment suites.  
@@ -15,7 +15,7 @@
 ## How to Run
 
 ```bash
-# From project root (full suite — 106 tests)
+# From project root (full suite — 110 tests)
 pytest tests/ -q
 
 # Core grader + environment suites only
@@ -49,9 +49,9 @@ pytest tests/test_ui_contract.py -v
 | Confidence Calibration | `test_environment.py` | 7 | ✅ All Pass | Brier-score bonus up to +0.05 |
 | Adversarial Robustness | `test_environment.py` | 16 | ✅ All Pass | Null fields, wrong types, empty body |
 | API Contract | `test_api_contract.py` | 9 | ✅ All Pass | Live server required |
-| UI Contract | `test_ui_contract.py` | 3 | ✅ All Pass | Gradio /web endpoint check |
+| UI Contract | `test_ui_contract.py` | 7 | ✅ All Pass | Web UI contract + regression guards |
 
-**Total: 106 tests — 106 passed, 0 failed**
+**Total: 110 tests — 110 passed, 0 failed**
 
 ---
 
@@ -868,7 +868,7 @@ Inconsistent (Black patient gets medium, unhoused gets low) → score < 0.60 ✅
 
 All 5 tasks accessible via reset() ✅
 All 5 tasks listed in available_tasks ✅
-Case counts: 4+3+3+12+2 = 24 total ✅
+Case counts: 4+3+5+12+4 = 28 total ✅
 All tasks score in [0.0, 1.0] ✅
 v2 task descriptions present ✅
 
@@ -877,8 +877,8 @@ v2 task descriptions present ✅
 ## Final Summary (v2)
 
 ```
-94 tests passed | 0 failed | 0 skipped
-Run time: 0.37s
+110 tests passed | 0 failed | 0 skipped
+Run time: ~0.20s
 
 v2 includes 5 tasks and additional API contract tests; detailed per-test sections below retain original sequencing.
 v2 (40 tests): 4 enhancements — asymmetric penalty, fairness, multi-turn, confidence
@@ -890,3 +890,18 @@ Multi-turn deterioration episodes tested end-to-end ✅
 Confidence calibration reward verified ✅
 Under-triage correctly penalized harder than over-triage ✅
 ```
+
+---
+
+## Final Verification Evidence (Submission Gate)
+
+Local validation gates:
+- `pytest tests/ -q` → 110 passed
+- `openenv validate` → `[OK] Ready for multi-mode deployment`
+- `./scripts/pre_submit_check.sh` → all checks passed
+
+Live deployment gate (HF Space):
+- `./scripts/live_verify.sh` → PASS
+- Endpoints validated: `/health`, `/suggest`, `/agent-assess`, `/reset`, `/step`, `/state`, `/grade-fairness`, `/metrics`
+- Fairness parity check: consistent group score `1.0`; inconsistent group score penalized
+- Multi-turn deterioration check: step-1 `done=false`, step-2 `done=true`

@@ -5,7 +5,11 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi.testclient import TestClient
+try:
+    from fastapi.testclient import TestClient  # pyright: ignore[reportMissingImports]
+except ModuleNotFoundError:
+    # Fallback for environments where FastAPI's re-export is not discoverable.
+    from starlette.testclient import TestClient  # pyright: ignore[reportMissingImports]
 
 from server.app import app
 
@@ -55,7 +59,26 @@ def test_web_ui_placeholder_metrics_match_current_counts():
     html = resp.text
 
     assert '>28<' in html
-    assert '>106<' in html
+    assert '>110<' in html
+
+
+def test_web_ui_task_switch_clears_stale_form_state():
+    resp = client.get('/web')
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert 'async function onTaskSelectionChange()' in html
+    assert 'document.getElementById("response-form").innerHTML = "";' in html
+    assert 'document.getElementById("result-section").innerHTML = "";' in html
+
+
+def test_web_ui_training_empty_state_hint_present():
+    resp = client.get('/web')
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert 'id="training-empty-hint"' in html
+    assert "No completed episodes yet." in html
 
 
 def test_tasks_endpoint_has_case_ids_for_all_tasks():
