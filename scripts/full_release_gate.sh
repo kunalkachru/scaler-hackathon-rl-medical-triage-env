@@ -6,10 +6,11 @@ set -o errtrace
 # Runs:
 #   1) local regression + OpenEnv validation
 #   2) baseline reproducibility check (inference.py)
-#   3) optional openenv push
-#   4) setupCredentials.py
-#   5) live API verification
-#   6) browser UI smoke verification
+#   3) organizer pre-validation script parity check
+#   4) optional openenv push
+#   5) setupCredentials.py
+#   6) live API verification
+#   7) browser UI smoke verification
 #
 # Usage:
 #   ./scripts/full_release_gate.sh \
@@ -130,6 +131,13 @@ fail_with_guidance() {
       echo "    python inference.py"
       echo "  - If using local server flow, confirm SERVER_URL is reachable (default http://localhost:8000)."
       ;;
+    "Organizer pre-validation parity")
+      echo "[release-gate] Fix:"
+      echo "  - Ensure scripts/validate-submission.sh is executable."
+      echo "  - Ensure Space URL responds on /reset."
+      echo "  - Re-run:"
+      echo "    ./scripts/validate-submission.sh \"$BASE_URL\" ."
+      ;;
     "Deploy to HF Space")
       echo "[release-gate] Fix:"
       echo "  - Check HF auth/token and repo id: $REPO_ID"
@@ -239,6 +247,7 @@ fi
 [[ -f "./scripts/pre_submit_check.sh" ]] || { echo "[release-gate] Missing ./scripts/pre_submit_check.sh"; exit 2; }
 [[ -f "./scripts/live_verify.sh" ]] || { echo "[release-gate] Missing ./scripts/live_verify.sh"; exit 2; }
 [[ -f "./scripts/browser_ui_smoke.py" ]] || { echo "[release-gate] Missing ./scripts/browser_ui_smoke.py"; exit 2; }
+[[ -f "./scripts/validate-submission.sh" ]] || { echo "[release-gate] Missing ./scripts/validate-submission.sh"; exit 2; }
 
 step "Local regression (pytest + validate + pre_submit_check)"
 run_cmd pytest tests/ -q
@@ -265,6 +274,9 @@ if missing:
     sys.exit(2)
 PY
 run_cmd python inference.py
+
+step "Organizer pre-validation parity"
+run_cmd ./scripts/validate-submission.sh "$BASE_URL" "."
 
 if [[ "$SKIP_DEPLOY" != "true" ]]; then
   step "Deploy to HF Space"

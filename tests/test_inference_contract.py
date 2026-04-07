@@ -4,14 +4,10 @@ import inference
 
 
 def test_validate_required_env_reports_missing_fields(monkeypatch):
-    monkeypatch.setattr(inference, "API_BASE_URL", "")
-    monkeypatch.setattr(inference, "MODEL_NAME", "")
     monkeypatch.setattr(inference, "API_KEY", "")
 
     missing = inference._validate_required_env()
 
-    assert "API_BASE_URL" in missing
-    assert "MODEL_NAME" in missing
     assert "HF_TOKEN (or OPENAI_API_KEY/API_KEY)" in missing
 
 
@@ -56,6 +52,7 @@ def test_main_uses_server_url_for_case_lookup(monkeypatch, capsys):
     inference.main()
     output = capsys.readouterr().out
 
-    assert "RESULTS SUMMARY" in output
+    assert "[START]" in output
+    assert "[END]" in output
     assert len(captured_server_urls) == 10
     assert all(url == inference.SERVER_URL for url in captured_server_urls)

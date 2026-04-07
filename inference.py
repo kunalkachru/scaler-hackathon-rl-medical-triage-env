@@ -1,31 +1,46 @@
 """
 inference.py — Mandatory Baseline Inference Script
-===================================================
-SPEC REQUIREMENTS (must not change these):
-  - Named exactly "inference.py" in the ROOT directory
-  - Uses OpenAI Client (not raw requests)
-  - Reads API_BASE_URL, MODEL_NAME, HF_TOKEN from environment variables
-  - Completes in < 20 minutes on 2 vCPU / 8 GB RAM
-  - No GPU assumption
+==================================================
+
+MANDATORY
+- Before submitting, ensure the following variables are defined:
+    API_BASE_URL   The API endpoint for the LLM
+    MODEL_NAME     The model identifier for inference
+    HF_TOKEN       Hugging Face/API key
+
+- Defaults are intentionally set only for API_BASE_URL and MODEL_NAME
+- Script is named `inference.py` at repository root
+- OpenAI client is used for all LLM calls
+
+STDOUT FORMAT
+The script emits exactly these line types:
+  [START] task=<task_name> env=<benchmark> model=<model_name>
+  [STEP]  step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
+  [END]   success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
 """
 
-import os
-import sys
 import json
-import time
+import os
 import re
 import subprocess
+import sys
+import time
+from typing import Optional
 
 import requests as req
 from openai import OpenAI
 
-# ── MANDATORY: read from environment variables ───────────────
-API_BASE_URL = os.getenv("API_BASE_URL", "")
-API_KEY      = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY", "")
-MODEL_NAME   = os.getenv("MODEL_NAME", "")
-SERVER_URL   = os.getenv("SERVER_URL", "http://localhost:8000")
-MAX_EPISODE_STEPS = 5   # Safety cap for multi-turn episodes
+# Mandatory env vars:
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY", "")
+SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8000")
+
+TASK_NAME = os.getenv("TASK_NAME", "medical_triage")
+BENCHMARK = os.getenv("BENCHMARK", "openenv_medical_triage")
+MAX_STEPS = 5
 TEMPERATURE = 0.0
+SUCCESS_SCORE_THRESHOLD = 0.5
 
 # ── System prompt — clinical triage agent ───────────────────
 SYSTEM_PROMPT = """You are an expert clinical triage nurse. You ALWAYS respond with a single valid JSON object.
@@ -71,8 +86,27 @@ def extract_json(text: str) -> dict:
     return {}
 
 
-def call_llm(client: OpenAI, patient_history: str, task_description: str,
-             task_id: str) -> dict:
+def log_start(task: str, env: str, model: str) -> None:
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
+    error_val = "null" if not error else error
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}",
+        flush=True,
+    )
+
+
+def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        flush=True,
+    )
+
+
+def call_llm(client: OpenAI, patient_history: str, task_description: str, task_id: str) -> dict:
     """Call LLM and return parsed JSON action."""
     try:
         completion = client.chat.completions.create(
@@ -91,13 +125,11 @@ def call_llm(client: OpenAI, patient_history: str, task_description: str,
         )
         raw = completion.choices[0].message.content or ""
         return extract_json(raw)
-    except Exception as e:
-        print(f"  [LLM error: {e}]")
+    except Exception:
         return {}
 
 
-def run_episode(client: OpenAI, task_id: str, case_index: int,
-                server_url: str) -> tuple[float, list[float], dict]:
+def run_episode(client: OpenAI, task_id: str, case_index: int, server_url: str) -> tuple[float, list[float], dict]:
     """
     Run a complete episode — handles BOTH single-step and multi-turn tasks.
 
@@ -118,8 +150,7 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
         )
         reset_resp.raise_for_status()
         reset_data = reset_resp.json()
-    except Exception as e:
-        print(f"  [Reset error: {e}]")
+    except Exception:
         return 0.0, [], {}
 
     # Capture session_id so step() hits the correct episode
@@ -137,7 +168,7 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
     step_count = 0
     done = reset_data.get("done", False)
 
-    while not done and step_count < MAX_EPISODE_STEPS:
+    while not done and step_count < MAX_STEPS:
         # Get LLM action
         action_dict = call_llm(client, patient_history, task_description, task_id)
 
@@ -150,6 +181,7 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
         if session_id:
             step_payload["session_id"] = session_id
 
+        step_error = None
         try:
             step_resp = req.post(
                 f"{server_url}/step",
@@ -158,8 +190,13 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
             )
             step_resp.raise_for_status()
             step_data = step_resp.json()
-        except Exception as e:
-            print(f"  [Step error: {e}]")
+        except Exception as exc:
+            step_error = str(exc)
+            reward = 0.0
+            done = True
+            step_count += 1
+            action_str = json.dumps(action_dict, separators=(",", ":"), ensure_ascii=True)
+            log_step(step=step_count, action=action_str, reward=reward, done=done, error=step_error)
             break
 
         reward = step_data.get("reward", 0.0)
@@ -169,14 +206,11 @@ def run_episode(client: OpenAI, task_id: str, case_index: int,
         last_reward = reward
         last_action_dict = action_dict   # track for fairness parity scoring
         step_count += 1
-
-        # For multi-turn: the next patient_history is the updated observation
         patient_history = obs.get("patient_history", patient_history)
-
-        # Show step-level feedback for multi-turn
-        if task_id == "deteriorating_patient":
-            feedback = obs.get("feedback", "")
-            print(f"    step {step_count}: action={action_dict.get('action','?')!r:12} reward={reward:.3f}  {feedback[:50]}")
+        action_str = json.dumps(action_dict, separators=(",", ":"), ensure_ascii=True)
+        raw_error = obs.get("last_action_error")
+        step_error = str(raw_error) if raw_error else None
+        log_step(step=step_count, action=action_str, reward=reward, done=done, error=step_error)
 
     return last_reward, step_rewards, last_action_dict
 
@@ -208,10 +242,6 @@ def _get_case_id(server_url: str, task_id: str, case_index: int) -> str:
 
 def _validate_required_env() -> list[str]:
     missing = []
-    if not API_BASE_URL:
-        missing.append("API_BASE_URL")
-    if not MODEL_NAME:
-        missing.append("MODEL_NAME")
     if not API_KEY:
         missing.append("HF_TOKEN (or OPENAI_API_KEY/API_KEY)")
     return missing
@@ -226,13 +256,7 @@ def main():
         print("Set the required variables and re-run inference.py")
         sys.exit(1)
 
-    print("=" * 60)
-    print("  Medical Triage Environment v2.0 — Baseline Inference")
-    print(f"  Model: {MODEL_NAME}")
-    print(f"  API:   {API_BASE_URL}")
-    print("=" * 60)
-
-    # ── Start server ────────────────────────────────────────
+    # Start local server when needed.
     server_proc = None
     if "localhost" in SERVER_URL:
         server_proc = subprocess.Popen(
@@ -240,16 +264,13 @@ def main():
              "--host", "0.0.0.0", "--port", "8000", "--log-level", "warning"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
-        print("  Starting environment server...", end=" ", flush=True)
         if not wait_for_server(SERVER_URL):
-            print("FAILED — server did not start")
-            return
-        print("ready\n")
+            sys.exit(1)
 
     # ── MANDATORY: Use OpenAI client ─────────────────────────
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
-    # ── Run 2 cases per task ─────────────────────────────────
+    # Run 2 cases per task to preserve baseline comparability.
     TASKS = [
         ("simple_triage",       "Easy",   [0, 1]),
         ("conflicting_vitals",  "Medium", [0, 1]),
@@ -258,84 +279,25 @@ def main():
         ("deteriorating_patient","Hard",  [0, 1]),   # MULTI-TURN
     ]
 
-    all_results = {}
-    total_cases = 0
-    total_score = 0.0
-
-    # Collect fairness responses per group for multi-variant parity scoring
-    # Maps group_prefix → {case_id: action_dict}
-    fairness_responses: dict[str, dict] = {}
-
-    for task_id, difficulty, case_indices in TASKS:
-        print(f"  [{difficulty}] {task_id}")
-        task_scores = []
-
+    for task_id, _difficulty, case_indices in TASKS:
         for ci in case_indices:
-            reward, _, action_dict = run_episode(client, task_id, ci, SERVER_URL)
-            task_scores.append(reward)
-            total_score += reward
-            total_cases += 1
-
-            # Look up case_id via the /tasks API — no server import needed
             case_id = _get_case_id(SERVER_URL, task_id, ci)
-
-            # Collect action for fairness parity scoring
-            if task_id == "demographic_fairness" and action_dict:
-                # group_id is the first 5 chars of case_id (e.g. "FP001")
-                group_id = case_id[:5]
-                if group_id not in fairness_responses:
-                    fairness_responses[group_id] = {}
-                fairness_responses[group_id][case_id] = action_dict
-
-            if task_id != "deteriorating_patient":
-                print(f"    {case_id}: {reward:.3f}")
-
-        task_avg = sum(task_scores) / len(task_scores)
-        all_results[task_id] = {"avg": task_avg, "scores": task_scores}
-        print()
-
-    # ── Demographic fairness: multi-variant parity scoring ────────
-    if fairness_responses:
-        print("  [Fairness] Running multi-variant parity check...")
-        parity_scores = []
-        for group_id, responses in fairness_responses.items():
-            if len(responses) < 2:
-                continue   # Need ≥2 variants to measure parity
+            episode_task = f"{task_id}:{case_id}"
+            log_start(task=episode_task, env=BENCHMARK, model=MODEL_NAME)
+            reward = 0.0
+            step_rewards: list[float] = []
+            success = False
             try:
-                pr = req.post(
-                    f"{SERVER_URL}/grade-fairness",
-                    json={"group_id": group_id, "responses": responses},
-                    timeout=10
-                )
-                if pr.status_code == 200:
-                    pd_data = pr.json()
-                    parity_score = pd_data.get("score", 0.0)
-                    parity_scores.append(parity_score)
-                    print(f"    {group_id}: parity={parity_score:.3f}  breakdown={pd_data.get('breakdown', {})}")
-            except Exception as e:
-                print(f"    [{group_id} parity error: {e}]")
-        if parity_scores:
-            avg_parity = sum(parity_scores) / len(parity_scores)
-            all_results["demographic_fairness"]["parity_avg"] = round(avg_parity, 3)
-            print(f"    Average parity score: {avg_parity:.3f}")
-        print()
+                reward, step_rewards, action_dict = run_episode(client, task_id, ci, SERVER_URL)
+                score = max(0.0, min(1.0, reward))
+                success = score >= SUCCESS_SCORE_THRESHOLD
+            except Exception:
+                score = 0.0
+                success = False
+            finally:
+                log_end(success=success, steps=len(step_rewards), score=score, rewards=step_rewards)
 
-    # ── Summary ──────────────────────────────────────────────
-    print("=" * 60)
-    print("  RESULTS SUMMARY")
-    print("=" * 60)
-    for task_id, diff, _ in TASKS:
-        res = all_results.get(task_id, {})
-        avg = res.get("avg", 0.0)
-        bar = "█" * int(avg * 20) + "░" * (20 - int(avg * 20))
-        print(f"  {task_id:<30} {avg:.3f}  {bar}")
-
-    overall = total_score / total_cases if total_cases else 0
-    print(f"\n  Overall average:               {overall:.3f}")
-    print(f"  Cases evaluated:               {total_cases}")
-    print("=" * 60)
-
-    # ── Cleanup ──────────────────────────────────────────────
+    # Cleanup
     if server_proc:
         server_proc.terminate()
         try:

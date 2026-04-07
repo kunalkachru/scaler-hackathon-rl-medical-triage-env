@@ -77,9 +77,11 @@ medical-triage-env/
 │   ├── test_environment.py   ← 24 environment integration tests
 │   ├── test_v2_enhancements.py ← 40 v2 feature tests
 │   ├── test_api_contract.py  ← 9 API contract tests
-│   └── test_ui_contract.py   ← 8 UI contract tests
+│   ├── test_ui_contract.py   ← 8 UI contract tests
+│   └── test_inference_contract.py ← 2 baseline inference contract tests
 ├── scripts/
 │   ├── pre_submit_check.sh   ← Pre-submission validation pipeline
+│   ├── validate-submission.sh ← Organizer-style validator parity script (mirrors sample naming/comments/layout)
 │   ├── live_verify.sh        ← Live API verification for deployed Space
 │   ├── browser_ui_smoke.py   ← Browser smoke validation for deployed UI
 │   └── full_release_gate.sh  ← One-command release/evaluator gate
@@ -362,7 +364,7 @@ python inference.py
 SERVER_URL="https://kunalkachru23-medical-triage-env.hf.space" python inference.py
 ```
 
-Runs 2 cases per task (10 total), prints score report with difficulty gradient.
+Runs 2 cases per task (10 total) and emits strict `[START]`, `[STEP]`, `[END]` lines to match organizer parsing rules.
 
 ### 8.2 RL Training Loop (`train.py`)
 

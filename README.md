@@ -336,6 +336,15 @@ Run pre-submit validator:
 ./scripts/pre_submit_check.sh
 ```
 
+Run organizer-style pre-validation script (HF ping + Docker build + `openenv validate`):
+
+```bash
+chmod +x ./scripts/validate-submission.sh
+./scripts/validate-submission.sh "https://<your-space>.hf.space"
+```
+
+This script mirrors the organizer sample structure (naming/comments/layout and 3-step validation flow) while targeting this repo.
+
 Run live deployment verification (HF Space API pack):
 
 ```bash
@@ -427,9 +436,11 @@ python inference.py
 The script:
 1. Starts the FastAPI server as a subprocess on port 8000
 2. Runs the LLM agent against 2 cases per task (10 total, 5 tasks)
-3. Scores each response using our deterministic graders
-4. Runs demographic parity check on fairness task
-5. Prints a reproducible score report with bar chart
+3. Scores each response using deterministic graders
+4. Emits organizer-mandated structured logs per episode:
+   - `[START] task=<...> env=<...> model=<...>`
+   - `[STEP] step=<...> action=<...> reward=<0.00> done=<true|false> error=<msg|null>`
+   - `[END] success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...>`
 
 To run against the live HF Space instead of a local server:
 
@@ -627,6 +638,7 @@ medical-triage-env/
 │   └── test_ui_contract.py   ← 8 UI contract tests (web interface hooks + UI regression guards)
 ├── scripts/
 │   ├── pre_submit_check.sh   ← Pre-submission validation: tests → Docker build → health → reset → openenv validate
+│   ├── validate-submission.sh ← Organizer-style validator parity script: HF /reset + Docker build + openenv validate
 │   ├── live_verify.sh        ← Live API verification pack for deployed Space
 │   ├── browser_ui_smoke.py   ← Headless browser smoke test for deployed /web UX
 │   └── full_release_gate.sh  ← One-command release gate (local + baseline + deploy + live API + browser UI)
