@@ -412,7 +412,7 @@ async def suggest_action(request: SuggestRequest):
     import os, json, re
 
     api_base = os.getenv("API_BASE_URL", "")
-    api_key  = os.getenv("HF_TOKEN") or os.getenv("API_KEY", "")
+    api_key  = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY", "")
     model    = request.model or os.getenv("MODEL_NAME", "")
 
     TRIAGE_SYSTEM_PROMPT = """You are an expert clinical triage nurse. Respond ONLY with a single valid JSON object.
@@ -912,8 +912,8 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
       <div style="margin-top:8px;font-size:13px">Select a task and click "New Patient Case" to begin</div>
       <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:600px;margin-left:auto;margin-right:auto">
         <div class="card"><div style="font-size:20px">5</div><div style="font-size:11px;color:var(--muted)">Tasks</div></div>
-        <div class="card"><div style="font-size:20px">24</div><div style="font-size:11px;color:var(--muted)">Patient Cases</div></div>
-        <div class="card"><div style="font-size:20px">94</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
+        <div class="card"><div style="font-size:20px">28</div><div style="font-size:11px;color:var(--muted)">Patient Cases</div></div>
+        <div class="card"><div style="font-size:20px">106</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
       </div>
     </div>
 
@@ -960,7 +960,15 @@ const TASK_INFO = {
 };
 
 const DIFF_CLASS = {easy:"easy", medium:"medium", hard:"hard"};
-let state = {task_id:null, case_id:null, episode_id:null, step:0, max_steps:1};
+
+function createSessionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return "web-" + crypto.randomUUID();
+  }
+  return "web-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+}
+
+let state = {task_id:null, case_id:null, episode_id:null, session_id:null, step:0, max_steps:1};
 
 function log(msg) {
   const el = document.getElementById("episode-log");
@@ -1017,14 +1025,21 @@ async function resetEnv() {
   document.getElementById("episode-dots").innerHTML = "";
 
   try {
-    const payload = {task_id: tid, seed: 42};
+    const payload = {task_id: tid, seed: 42, session_id: createSessionId()};
     if (ci) payload.case_index = parseInt(ci);
     const r = await fetch("/reset", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
     const d = await r.json();
     const obs = d.observation;
     const info = d.info || {};
 
-    state = {task_id: tid, case_id: obs.case_id, episode_id: info.episode_id, step: 0, max_steps: info.max_steps || 1};
+    state = {
+      task_id: tid,
+      case_id: obs.case_id,
+      episode_id: info.episode_id,
+      session_id: info.session_id || payload.session_id,
+      step: 0,
+      max_steps: info.max_steps || 1
+    };
 
     const tinfo = TASK_INFO[tid] || {};
     const badge = document.getElementById("task-badge");
@@ -1126,8 +1141,10 @@ async function submitAction() {
   document.getElementById("result-section").innerHTML = '<div class="loading">Grading response...</div>';
 
   try {
+    const payload = {action};
+    if (state.session_id) payload.session_id = state.session_id;
     const r = await fetch("/step", {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({action})});
+      body: JSON.stringify(payload)});
     const d = await r.json();
     const obs = d.observation;
     const reward = d.reward;

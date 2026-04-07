@@ -1,20 +1,24 @@
 venv/
-**pycache**/
-_.pyc
-_.pyo
-.pytest*cache/
+.venv/
+**/venv/**
+**/.venv/**
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
 *.egg-info/
 .eggs/
 dist/
 build/
-_.so
-_.dylib
-.DS*Store
+*.so
+*.dylib
+.DS_Store
 .env
 *.log
 outputs/
+.cursor/
 
-docs/EDUCATIONAL_DEEP_DIVE_LOCAL.md
+# docs/EDUCATIONAL_DEEP_DIVE_LOCAL.md
 docs/LOW_LEVEL_DESIGN.md
-docs/openenv_hackathon_criteria.md
+# docs/openenv_hackathon_criteria.md
 TODO.md

@@ -39,6 +39,25 @@ def test_web_ui_contains_case_select_population_hooks():
     assert "fetch('/tasks')" in html
 
 
+def test_web_ui_uses_session_id_for_isolated_episodes():
+    resp = client.get('/web')
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert 'function createSessionId()' in html
+    assert 'session_id: createSessionId()' in html
+    assert 'if (state.session_id) payload.session_id = state.session_id;' in html
+
+
+def test_web_ui_placeholder_metrics_match_current_counts():
+    resp = client.get('/web')
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert '>28<' in html
+    assert '>106<' in html
+
+
 def test_tasks_endpoint_has_case_ids_for_all_tasks():
     resp = client.get('/tasks')
     assert resp.status_code == 200

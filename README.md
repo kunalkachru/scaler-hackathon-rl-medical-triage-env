@@ -361,6 +361,32 @@ export SERVER_URL="https://kunalkachru23-medical-triage-env.hf.space"
 python inference.py
 ```
 
+### If the deployed Space falls back to rule/mock mode
+
+If the UI Auto-fill status shows rule-based/mock mode, or `POST /suggest` returns `llm_used=false`, refresh Space credentials once:
+
+```bash
+# 1) Update local .env with current values
+#    HF_TOKEN=<admin-token-for-space-settings>
+#    SPACE_REPO_ID=<your-username>/<your-space-name>
+#    INFERENCE_HF_TOKEN=<token-used-by-runtime-inference>
+
+# 2) Push variables/secrets to the Space
+python setupCredentials.py
+
+# 3) Restart the HF Space once from Space Settings
+```
+
+Quick verification after restart:
+
+```bash
+curl -X POST "https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/suggest" \
+  -H "content-type: application/json" \
+  -d '{"patient_history":"RR=24 SpO2=93 BP=105/70 HR=112 Temp=38.4 Consciousness=Alert","task_id":"simple_triage"}'
+```
+
+Expected: response contains `"llm_used": true`.
+
 ---
 
 ## Running the RL Training Loop

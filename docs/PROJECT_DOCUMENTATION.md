@@ -527,6 +527,30 @@ Set Space runtime variables via HF Settings or `setupCredentials.py`:
 - `MODEL_NAME` (variable) — model identifier
 - `HF_TOKEN` (secret) — Hugging Face API key
 
+If endpoints still run in fallback/mock mode after deploy, apply this one-time refresh:
+
+```bash
+# 1) Update local .env
+# HF_TOKEN=<admin-token-for-space-settings>
+# SPACE_REPO_ID=<your-username>/<your-space-name>
+# INFERENCE_HF_TOKEN=<token-used-by-runtime-inference>
+
+# 2) Push variables/secrets to the Space
+python setupCredentials.py
+
+# 3) Restart the HF Space once
+```
+
+Verify runtime is using the real model path:
+
+```bash
+curl -X POST "https://<your-space-subdomain>.hf.space/suggest" \
+  -H "content-type: application/json" \
+  -d '{"patient_history":"RR=24 SpO2=93 BP=105/70 HR=112 Temp=38.4 Consciousness=Alert","task_id":"simple_triage"}'
+```
+
+Expected: response includes `"llm_used": true`.
+
 ---
 
 ## 12. Multi-Model Benchmark
