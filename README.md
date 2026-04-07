@@ -316,7 +316,7 @@ Task 3 (Masked Deterioration):
 ## Running Tests
 
 ```bash
-# Full suite (116 tests)
+# Full suite (118 tests)
 venv/bin/python -m pytest tests/ -v
 
 # By module
@@ -325,9 +325,10 @@ venv/bin/python -m pytest tests/test_environment.py -v      # 24 environment int
 venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 45 v2 feature tests (inc. 5 regression)
 venv/bin/python -m pytest tests/test_api_contract.py -v     # 9 API contract tests
 venv/bin/python -m pytest tests/test_ui_contract.py -v      # 8 UI contract tests
+venv/bin/python -m pytest tests/test_inference_contract.py -v  # 2 baseline inference contract tests
 ```
 
-**Current status:** 116 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status:** 118 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 
@@ -352,7 +353,7 @@ python -m playwright install chromium
 python scripts/browser_ui_smoke.py --base-url "https://<your-space>.hf.space"
 ```
 
-Run one-command full release gate (local + live API + browser UI):
+Run one-command full release gate (local + baseline reproducibility + live API + browser UI):
 
 ```bash
 chmod +x ./scripts/full_release_gate.sh
@@ -363,6 +364,24 @@ chmod +x ./scripts/full_release_gate.sh
 
 # If already deployed and you only want verification:
 ./scripts/full_release_gate.sh --skip-deploy --base-url "https://<your-space>.hf.space" --expect-llm true
+```
+
+Before running the release gate, export baseline env vars used by `inference.py`:
+
+```bash
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="meta-llama/Llama-3.3-70B-Instruct"
+export HF_TOKEN="your-token-here"
+```
+
+Recommended shell hygiene (avoids Conda vs venv drift):
+
+```bash
+cd "/Users/kunalkachru/scaler_rl_critical_care_enhancements/scaler-hackathon-rl-medical-triage-env"
+source "../venv-triage-env/bin/activate"
+hash -r
+which python
+which openenv
 ```
 
 Release gate flag guide:
@@ -610,7 +629,8 @@ medical-triage-env/
 │   ├── pre_submit_check.sh   ← Pre-submission validation: tests → Docker build → health → reset → openenv validate
 │   ├── live_verify.sh        ← Live API verification pack for deployed Space
 │   ├── browser_ui_smoke.py   ← Headless browser smoke test for deployed /web UX
-│   └── full_release_gate.sh  ← One-command release gate (local + deploy + live API + browser UI)
+│   └── full_release_gate.sh  ← One-command release gate (local + baseline + deploy + live API + browser UI)
+├── tests/test_inference_contract.py ← Baseline reproducibility contract checks
 └── docs/
     ├── PROJECT_DOCUMENTATION.md ← Full evaluator runbook (architecture, setup, deployment, UI testing)
     └── TEST_REPORT.md        ← Exhaustive test narrative with case-wise validation evidence
@@ -701,4 +721,4 @@ For judges and evaluators:
 1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/medical-triage-env and click through the web UI
 2. **API smoke test** — `curl https://kunalkachru23-medical-triage-env.hf.space/health`
 3. **Full runbook** — [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md) (setup, all endpoints, UI test plan, quickstart)
-4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (116 tests, case-wise grader validation)
+4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (118 tests, case-wise grader validation)

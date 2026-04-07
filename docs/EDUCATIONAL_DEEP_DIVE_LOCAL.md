@@ -256,14 +256,15 @@ RL contribution:
 ### I) `tests/` - quality and regression safety
 
 Primary function:
-- ensure reliability, correctness, and contract stability across 111 tests
+- ensure reliability, correctness, and contract stability across 118 tests
 
 Types:
 - `test_graders.py` (30): NEWS2 boundary, priority distance, task grader unit tests
 - `test_environment.py` (24): environment lifecycle, reset/step/state, full episode flows
 - `test_v2_enhancements.py` (40): fairness parity, asymmetric penalty, confidence calibration, multi-turn deterioration, 16 adversarial robustness cases
 - `test_api_contract.py` (9): API contract for all action fields (live server)
-- `test_ui_contract.py` (7): UI DOM contract checks plus regression guards (live server)
+- `test_ui_contract.py` (8): UI DOM contract checks plus regression guards (live server)
+- `test_inference_contract.py` (2): baseline inference reproducibility guards
 
 RL contribution:
 - protects training signal integrity (grader correctness = reward correctness)

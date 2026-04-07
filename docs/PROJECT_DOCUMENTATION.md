@@ -384,12 +384,12 @@ Demonstrates the environment supports training, not just evaluation:
 
 ## 9. Testing and Validation
 
-### 9.1 Test Suite (116 tests)
+### 9.1 Test Suite (118 tests)
 
 ```bash
 # Full suite
 pytest tests/ -q
-# → 116 passed in ~0.3s
+# → 118 passed in ~0.3s
 
 # By module
 pytest tests/test_graders.py -v           # 30 tests — NEWS2, priority distance, all task graders
@@ -397,6 +397,7 @@ pytest tests/test_environment.py -v       # 24 tests — reset/step/state/episod
 pytest tests/test_v2_enhancements.py -v   # 45 tests — fairness, deterioration, confidence, asymmetric + 5 regression
 pytest tests/test_api_contract.py -v      # 9 tests  — session isolation, fairness endpoint, metrics
 pytest tests/test_ui_contract.py -v       # 8 tests  — web UI hooks and UI regression guards
+pytest tests/test_inference_contract.py -v # 2 tests  — baseline inference reproducibility guards
 ```
 
 **Test coverage:**
@@ -408,6 +409,7 @@ pytest tests/test_ui_contract.py -v       # 8 tests  — web UI hooks and UI reg
 | `test_v2_enhancements.py` | 45 | Asymmetric penalty, fairness grader, deterioration multi-turn, confidence calibration, all-5-tasks integration + regression tests for dead reward keys and news2_score correctness |
 | `test_api_contract.py` | 9 | Session isolation, grade-fairness endpoint, metrics structure, step preserves fields |
 | `test_ui_contract.py` | 8 | Web UI HTML contract, session wiring, empty-state/task-switch guards, and history demarcation checks |
+| `test_inference_contract.py` | 2 | Baseline script contract checks to prevent reproducibility regressions |
 
 ### 9.2 Pre-Submission Validation Gate
 
@@ -416,7 +418,7 @@ pytest tests/test_ui_contract.py -v       # 8 tests  — web UI hooks and UI reg
 ```
 
 Pipeline (5 steps):
-1. Full test suite (116 tests must pass)
+1. Full test suite (118 tests must pass)
 2. Docker build
 3. Container health check on port 7860
 4. Reset endpoint smoke check
@@ -530,7 +532,7 @@ python -m pip install playwright
 python -m playwright install chromium
 python scripts/browser_ui_smoke.py --base-url "https://<your-space>.hf.space"
 
-# one-command release gate (local+live checks)
+# one-command release gate (local + baseline + live checks)
 chmod +x ./scripts/full_release_gate.sh
 ./scripts/full_release_gate.sh \
   --base-url "https://<your-space>.hf.space" \
@@ -547,6 +549,9 @@ Release gate flags:
 --skip-deploy                  Skip deployment step; run validation only
 --skip-playwright-install      Skip Playwright install step (script will still fail with guidance if missing)
 -h, --help                     Show script usage and options
+
+Baseline env vars (required by automated release gate):
+API_BASE_URL, MODEL_NAME, HF_TOKEN (or OPENAI_API_KEY/API_KEY)
 ```
 
 Recommended evaluator invocations:
@@ -633,7 +638,7 @@ openenv validate .
 **Step 2 — Run tests:**
 ```bash
 pytest tests/ -q
-# Expected: 116 passed
+# Expected: 118 passed
 ```
 
 **Step 3 — Test the live Space:**

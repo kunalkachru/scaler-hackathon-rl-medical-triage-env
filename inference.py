@@ -277,7 +277,7 @@ def main():
             total_cases += 1
 
             # Look up case_id via the /tasks API — no server import needed
-            case_id = _get_case_id(server_url, task_id, ci)
+            case_id = _get_case_id(SERVER_URL, task_id, ci)
 
             # Collect action for fairness parity scoring
             if task_id == "demographic_fairness" and action_dict:

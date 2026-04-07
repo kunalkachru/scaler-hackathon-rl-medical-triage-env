@@ -5,10 +5,11 @@ set -o errtrace
 # Full release gate for hackathon submission.
 # Runs:
 #   1) local regression + OpenEnv validation
-#   2) optional openenv push
-#   3) setupCredentials.py
-#   4) live API verification
-#   5) browser UI smoke verification
+#   2) baseline reproducibility check (inference.py)
+#   3) optional openenv push
+#   4) setupCredentials.py
+#   5) live API verification
+#   6) browser UI smoke verification
 #
 # Usage:
 #   ./scripts/full_release_gate.sh \
@@ -122,6 +123,13 @@ fail_with_guidance() {
       echo "    openenv validate"
       echo "    ./scripts/pre_submit_check.sh"
       ;;
+    "Baseline reproducibility (inference.py)")
+      echo "[release-gate] Fix:"
+      echo "  - Ensure env vars are set: API_BASE_URL, MODEL_NAME, HF_TOKEN (or OPENAI_API_KEY/API_KEY)."
+      echo "  - Re-run baseline manually:"
+      echo "    python inference.py"
+      echo "  - If using local server flow, confirm SERVER_URL is reachable (default http://localhost:8000)."
+      ;;
     "Deploy to HF Space")
       echo "[release-gate] Fix:"
       echo "  - Check HF auth/token and repo id: $REPO_ID"
@@ -202,8 +210,17 @@ fi
 
 step "Environment sanity"
 echo "[release-gate] python: $(command -v python)"
+echo "[release-gate] openenv: $(command -v openenv)"
 run_cmd python -V
 echo "[release-gate] working directory: $(pwd)"
+run_cmd python - <<'PY'
+import importlib.metadata as md
+for pkg in ("openenv-core", "fastapi", "openai"):
+    try:
+        print(f"[release-gate] {pkg} version: {md.version(pkg)}")
+    except md.PackageNotFoundError:
+        print(f"[release-gate] {pkg} version: not installed")
+PY
 
 PY_MAJ_MIN="$(python - <<'PY'
 import sys
@@ -227,6 +244,27 @@ step "Local regression (pytest + validate + pre_submit_check)"
 run_cmd pytest tests/ -q
 run_cmd openenv validate
 run_cmd ./scripts/pre_submit_check.sh
+
+step "Baseline reproducibility (inference.py)"
+run_cmd python - <<'PY'
+import os
+import sys
+
+missing = []
+if not os.getenv("API_BASE_URL"):
+    missing.append("API_BASE_URL")
+if not os.getenv("MODEL_NAME"):
+    missing.append("MODEL_NAME")
+if not (os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY")):
+    missing.append("HF_TOKEN (or OPENAI_API_KEY/API_KEY)")
+
+if missing:
+    print("[release-gate] Missing baseline env vars:")
+    for name in missing:
+        print(f"  - {name}")
+    sys.exit(2)
+PY
+run_cmd python inference.py
 
 if [[ "$SKIP_DEPLOY" != "true" ]]; then
   step "Deploy to HF Space"
