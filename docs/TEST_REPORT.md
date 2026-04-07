@@ -4,7 +4,7 @@
 **Environment:** Medical Triage Environment v2.0.0  
 **Python:** 3.12.3 | **pytest:** 9.0.2  
 **Core Suite Tests:** 103 | **Passed:** 103 | **Failed:** 0  
-**Current Full Suite Status:** 110 passed (`pytest tests/ -q`)  
+**Current Full Suite Status:** 111 passed (`pytest tests/ -q`)  
 **Core Suite Run time:** ~0.4s  
 
 > Note: This report is a deep-dive narrative for foundational grader/environment suites.  
@@ -15,7 +15,7 @@
 ## How to Run
 
 ```bash
-# From project root (full suite — 110 tests)
+# From project root (full suite — 111 tests)
 pytest tests/ -q
 
 # Core grader + environment suites only
@@ -49,9 +49,9 @@ pytest tests/test_ui_contract.py -v
 | Confidence Calibration | `test_environment.py` | 7 | ✅ All Pass | Brier-score bonus up to +0.05 |
 | Adversarial Robustness | `test_environment.py` | 16 | ✅ All Pass | Null fields, wrong types, empty body |
 | API Contract | `test_api_contract.py` | 9 | ✅ All Pass | Live server required |
-| UI Contract | `test_ui_contract.py` | 7 | ✅ All Pass | Web UI contract + regression guards |
+| UI Contract | `test_ui_contract.py` | 8 | ✅ All Pass | Web UI contract + regression guards |
 
-**Total: 110 tests — 110 passed, 0 failed**
+**Total: 111 tests — 111 passed, 0 failed**
 
 ---
 
@@ -877,7 +877,7 @@ v2 task descriptions present ✅
 ## Final Summary (v2)
 
 ```
-110 tests passed | 0 failed | 0 skipped
+111 tests passed | 0 failed | 0 skipped
 Run time: ~0.20s
 
 v2 includes 5 tasks and additional API contract tests; detailed per-test sections below retain original sequencing.
@@ -896,7 +896,7 @@ Under-triage correctly penalized harder than over-triage ✅
 ## Final Verification Evidence (Submission Gate)
 
 Local validation gates:
-- `pytest tests/ -q` → 110 passed
+- `pytest tests/ -q` → 111 passed
 - `openenv validate` → `[OK] Ready for multi-mode deployment`
 - `./scripts/pre_submit_check.sh` → all checks passed
 

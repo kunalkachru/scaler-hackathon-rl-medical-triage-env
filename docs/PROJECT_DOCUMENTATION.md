@@ -5,7 +5,7 @@
 **Live Space:** https://huggingface.co/spaces/kunalkachru23/scaler-hackathon-rl-medical-triage-env  
 **API URL:** https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space  
 **GitHub:** https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env  
-**Tests:** 110 passing, 0 failing
+**Tests:** 111 passing, 0 failing
 
 ---
 
@@ -77,9 +77,12 @@ scaler-hackathon-rl-medical-triage-env/
 │   ├── test_environment.py   ← 24 environment integration tests
 │   ├── test_v2_enhancements.py ← 40 v2 feature tests
 │   ├── test_api_contract.py  ← 9 API contract tests
-│   └── test_ui_contract.py   ← 3 UI contract tests
+│   └── test_ui_contract.py   ← 8 UI contract tests
 ├── scripts/
-│   └── pre_submit_check.sh   ← Pre-submission validation pipeline
+│   ├── pre_submit_check.sh   ← Pre-submission validation pipeline
+│   ├── live_verify.sh        ← Live API verification for deployed Space
+│   ├── browser_ui_smoke.py   ← Browser smoke validation for deployed UI
+│   └── full_release_gate.sh  ← One-command release/evaluator gate
 └── docs/
     ├── PROJECT_DOCUMENTATION.md  ← This file
     └── TEST_REPORT.md        ← Exhaustive test narrative
@@ -381,12 +384,12 @@ Demonstrates the environment supports training, not just evaluation:
 
 ## 9. Testing and Validation
 
-### 9.1 Test Suite (110 tests)
+### 9.1 Test Suite (111 tests)
 
 ```bash
 # Full suite
 pytest tests/ -q
-# → 110 passed in ~0.3s
+# → 111 passed in ~0.3s
 
 # By module
 pytest tests/test_graders.py -v           # 30 tests — NEWS2, priority distance, all task graders
@@ -404,7 +407,7 @@ pytest tests/test_ui_contract.py -v       # 7 tests  — web UI hooks and UI reg
 | `test_environment.py` | 24 | reset/step/state contracts, full episode flows, multi-episode independence |
 | `test_v2_enhancements.py` | 40 | Asymmetric penalty, fairness grader, deterioration multi-turn, confidence calibration, all-5-tasks integration |
 | `test_api_contract.py` | 9 | Session isolation, grade-fairness endpoint, metrics structure, step preserves fields |
-| `test_ui_contract.py` | 7 | Web UI HTML contract, session wiring, empty-state and task-switch regression guards |
+| `test_ui_contract.py` | 8 | Web UI HTML contract, session wiring, empty-state/task-switch guards, and history demarcation checks |
 
 ### 9.2 Pre-Submission Validation Gate
 
@@ -413,7 +416,7 @@ pytest tests/test_ui_contract.py -v       # 7 tests  — web UI hooks and UI reg
 ```
 
 Pipeline (5 steps):
-1. Full test suite (110 tests must pass)
+1. Full test suite (111 tests must pass)
 2. Docker build
 3. Container health check on port 7860
 4. Reset endpoint smoke check
@@ -521,6 +524,45 @@ openenv validate .
 
 # full live deployment API pack
 ./scripts/live_verify.sh
+
+# browser-level smoke validation (headless)
+python -m pip install playwright
+python -m playwright install chromium
+python scripts/browser_ui_smoke.py --base-url "https://<your-space>.hf.space"
+
+# one-command release gate (local+live checks)
+chmod +x ./scripts/full_release_gate.sh
+./scripts/full_release_gate.sh \
+  --base-url "https://<your-space>.hf.space" \
+  --repo-id "<your-username>/<your-space-name>" \
+  --expect-llm true
+```
+
+Release gate flags:
+
+```text
+--base-url <url>               Live target base URL (required for live verification stages)
+--repo-id <user/space>         HF repo id used by openenv push (required unless --skip-deploy)
+--expect-llm true|false        true = strict LLM-path validation; false = allow fallback mode
+--skip-deploy                  Skip deployment step; run validation only
+--skip-playwright-install      Skip Playwright install step (script will still fail with guidance if missing)
+-h, --help                     Show script usage and options
+```
+
+Recommended evaluator invocations:
+
+```bash
+# Full run: local checks + deploy + live API + browser smoke
+./scripts/full_release_gate.sh \
+  --base-url "https://<your-space>.hf.space" \
+  --repo-id "<user>/<space>" \
+  --expect-llm true
+
+# Verification-only run after deployment is already complete
+./scripts/full_release_gate.sh \
+  --skip-deploy \
+  --base-url "https://<your-space>.hf.space" \
+  --expect-llm true
 ```
 
 ### 11.3 Post-Deploy Configuration
@@ -591,7 +633,7 @@ openenv validate .
 **Step 2 — Run tests:**
 ```bash
 pytest tests/ -q
-# Expected: 110 passed
+# Expected: 111 passed
 ```
 
 **Step 3 — Test the live Space:**

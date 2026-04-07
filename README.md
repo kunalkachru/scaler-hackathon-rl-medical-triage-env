@@ -21,7 +21,7 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **API base URL** | https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space |
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
 | **Version** | v2.0.0 |
-| **Tests** | 110 passing |
+| **Tests** | 111 passing |
 
 For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
@@ -316,7 +316,7 @@ Task 3 (Masked Deterioration):
 ## Running Tests
 
 ```bash
-# Full suite (110 tests)
+# Full suite (111 tests)
 venv/bin/python -m pytest tests/ -v
 
 # By module
@@ -324,10 +324,10 @@ venv/bin/python -m pytest tests/test_graders.py -v          # 30 grader unit tes
 venv/bin/python -m pytest tests/test_environment.py -v      # 24 environment integration tests
 venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 40 v2 feature tests
 venv/bin/python -m pytest tests/test_api_contract.py -v     # 9 API contract tests
-venv/bin/python -m pytest tests/test_ui_contract.py -v      # 7 UI contract tests
+venv/bin/python -m pytest tests/test_ui_contract.py -v      # 8 UI contract tests
 ```
 
-**Current status:** 110 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status:** 111 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 
@@ -342,6 +342,55 @@ Run live deployment verification (HF Space API pack):
 # Optional:
 # BASE_URL="https://<your-space>.hf.space" ./scripts/live_verify.sh
 # EXPECT_LLM=false ./scripts/live_verify.sh
+```
+
+Run browser-based UI smoke test (consumer-facing, headless):
+
+```bash
+python -m pip install playwright
+python -m playwright install chromium
+python scripts/browser_ui_smoke.py --base-url "https://<your-space>.hf.space"
+```
+
+Run one-command full release gate (local + live API + browser UI):
+
+```bash
+chmod +x ./scripts/full_release_gate.sh
+./scripts/full_release_gate.sh \
+  --base-url "https://<your-space>.hf.space" \
+  --repo-id "<your-username>/<your-space-name>" \
+  --expect-llm true
+
+# If already deployed and you only want verification:
+./scripts/full_release_gate.sh --skip-deploy --base-url "https://<your-space>.hf.space" --expect-llm true
+```
+
+Release gate flag guide:
+
+```text
+--base-url <url>               Required for live checks. Example: https://<space>.hf.space
+--repo-id <user/space>         Required when deploy step is enabled.
+--expect-llm true|false        true  = fail if /suggest returns llm_used=false
+                               false = allow rule/mock fallback (for diagnostics only)
+--skip-deploy                  Skip openenv push and only run validation steps
+--skip-playwright-install      Assume Playwright is already installed; fail with guidance if missing
+-h, --help                     Print built-in usage/help
+```
+
+Evaluator presets:
+
+```bash
+# Full evaluator run (deploy + all checks)
+./scripts/full_release_gate.sh \
+  --base-url "https://<your-space>.hf.space" \
+  --repo-id "<user>/<space>" \
+  --expect-llm true
+
+# Already deployed run (fast verification only)
+./scripts/full_release_gate.sh \
+  --skip-deploy \
+  --base-url "https://<your-space>.hf.space" \
+  --expect-llm true
 ```
 
 ---
@@ -555,9 +604,12 @@ scaler-hackathon-rl-medical-triage-env/
 │   ├── test_environment.py   ← 24 environment integration tests (reset/step/state/episode flows)
 │   ├── test_v2_enhancements.py ← 40 v2 feature tests (fairness, deterioration, confidence, asymmetric penalty)
 │   ├── test_api_contract.py  ← 9 API contract tests (session isolation, fairness endpoint, metrics)
-│   └── test_ui_contract.py   ← 7 UI contract tests (web interface hooks + UI regression guards)
+│   └── test_ui_contract.py   ← 8 UI contract tests (web interface hooks + UI regression guards)
 ├── scripts/
-│   └── pre_submit_check.sh   ← Pre-submission validation: tests → Docker build → health → reset → openenv validate
+│   ├── pre_submit_check.sh   ← Pre-submission validation: tests → Docker build → health → reset → openenv validate
+│   ├── live_verify.sh        ← Live API verification pack for deployed Space
+│   ├── browser_ui_smoke.py   ← Headless browser smoke test for deployed /web UX
+│   └── full_release_gate.sh  ← One-command release gate (local + deploy + live API + browser UI)
 └── docs/
     ├── PROJECT_DOCUMENTATION.md ← Full evaluator runbook (architecture, setup, deployment, UI testing)
     └── TEST_REPORT.md        ← Exhaustive test narrative with case-wise validation evidence
@@ -648,4 +700,4 @@ For judges and evaluators:
 1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/scaler-hackathon-rl-medical-triage-env and click through the web UI
 2. **API smoke test** — `curl https://kunalkachru23-scaler-hackathon-rl-medical-triage-env.hf.space/health`
 3. **Full runbook** — [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md) (setup, all endpoints, UI test plan, quickstart)
-4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (110 tests, case-wise grader validation)
+4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (111 tests, case-wise grader validation)

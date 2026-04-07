@@ -702,7 +702,7 @@ header .version{font-size:11px;background:#1e3a5f;color:#6ab0f5;padding:2px 8px;
 .sidebar{padding:20px;border-right:1px solid var(--border);background:var(--surface)}
 .content{padding:20px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
-.card h3{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.card h3{font-size:14px;font-weight:600;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 select,button{width:100%;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px;cursor:pointer;margin-bottom:8px}
 button.primary{background:var(--blue);border-color:var(--blue);font-weight:600}
 button.primary:hover{opacity:.85}
@@ -718,7 +718,7 @@ button:hover{background:#2d3350}
 .vital-box .pts{font-size:10px;color:var(--muted)}
 form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 form .full{grid-column:1/-1}
-label{font-size:11px;color:var(--muted);display:block;margin-bottom:3px}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
 input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:13px}
 .result-card{background:var(--surface2);border-radius:var(--radius);padding:20px;margin-top:14px;border:2px solid transparent}
 .result-card.excellent{border-color:#3B6D11}.result-card.good{border-color:#BA7517}.result-card.poor{border-color:#A32D2D}
@@ -742,7 +742,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
 .error{background:#2d0f0f;border:1px solid #5a1a1a;border-radius:8px;padding:10px;color:#e05c5c;font-size:12px;margin-top:8px}
 .loading{text-align:center;padding:20px;color:var(--muted);animation:pulse 1.4s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
-#episode-log{max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:monospace;font-size:11px;color:var(--muted);margin-top:8px;white-space:pre-wrap;word-break:break-word}
+#episode-log{max-height:200px;overflow-y:auto;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:monospace;font-size:12px;line-height:1.5;color:var(--muted);margin-top:8px;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -775,12 +775,13 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
         <option value="deteriorating_patient">📉 Deteriorating Patient (Hard, Multi-Turn)</option>
       </select>
       <select id="case-select"><option value="">Random case</option></select>
-      <button class="primary" onclick="resetEnv()">🔄 New Patient Case</button>
+      <div id="case-select-hint" style="font-size:12px;color:var(--muted);margin:-4px 0 8px">Select a case index, then click <strong style="color:#e8eaf0">New Patient Case</strong> to load that patient.</div>
+      <button id="reset-btn" class="primary" onclick="resetEnv()">🔄 New Patient Case</button>
     </div>
 
     <div class="card" id="task-info-card">
       <h3>About This Task</h3>
-      <div id="task-info-text" style="font-size:12px;color:var(--muted);line-height:1.6"></div>
+      <div id="task-info-text" style="font-size:13px;color:var(--muted);line-height:1.6"></div>
     </div>
 
     <div class="card">
@@ -814,7 +815,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
     <div id="patient-section" style="display:none">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
         <div id="task-badge" class="task-badge easy">Easy</div>
-        <div id="case-label" style="font-size:12px;color:var(--muted)"></div>
+        <div id="case-label" style="font-size:13px;color:var(--muted)"></div>
         <div id="episode-dots" class="episode-trail"></div>
       </div>
 
@@ -897,7 +898,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
         <div id="response-form"></div>
         <div style="font-size:11px;color:var(--muted);margin:10px 0 6px;text-align:center">— or skip steps 2-3 and let the AI fill everything —</div>
         <div style="display:flex;gap:8px;margin-top:4px">
-          <button class="primary" style="flex:2" onclick="submitAction()">📋 Step 4: Submit & Score</button>
+          <button id="submit-btn" class="primary" style="flex:2" onclick="submitAction()">📋 Step 4: Submit & Score</button>
           <button id="ai-btn" style="flex:1;background:#1e3a5f;border-color:#2a5080;color:#6ab0f5;font-weight:600" onclick="aiFill()">🤖 Auto-fill with AI</button>
         </div>
         <div id="ai-status" style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center"></div>
@@ -913,7 +914,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
       <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:600px;margin-left:auto;margin-right:auto">
         <div class="card"><div style="font-size:20px">5</div><div style="font-size:11px;color:var(--muted)">Tasks</div></div>
         <div class="card"><div style="font-size:20px">28</div><div style="font-size:11px;color:var(--muted)">Patient Cases</div></div>
-        <div class="card"><div style="font-size:20px">110</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
+        <div class="card"><div style="font-size:20px">111</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
       </div>
     </div>
 
@@ -980,6 +981,13 @@ function log(msg) {
   el.scrollTop = el.scrollHeight;
 }
 
+function logDivider(label) {
+  const el = document.getElementById("episode-log");
+  const safe = String(label || "Step complete").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  el.innerHTML += `<div style="margin:8px 0 6px;padding-top:6px;border-top:1px dashed #3a4266;color:#8fa2d6;font-size:11px">──── ${safe} ────</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
 function updateTaskInfo() {
   const tid = document.getElementById("task-select").value;
   const info = TASK_INFO[tid] || {};
@@ -1023,6 +1031,12 @@ document.getElementById("task-select").addEventListener("change", onTaskSelectio
 onTaskSelectionChange();
 
 async function resetEnv() {
+  const resetBtn = document.getElementById("reset-btn");
+  const originalResetLabel = resetBtn ? resetBtn.textContent : "";
+  if (resetBtn) {
+    resetBtn.disabled = true;
+    resetBtn.textContent = "⏳ Loading...";
+  }
   const tid = document.getElementById("task-select").value;
   const ci  = document.getElementById("case-select").value;
   document.getElementById("patient-section").style.display = "block";
@@ -1066,10 +1080,16 @@ async function resetEnv() {
 
     renderEpisodeDots();
     buildForm(tid);
+    logDivider(`Episode ${info.episode_id || "new"} started`);
     log(`Reset: ${tid} → ${obs.case_id}`);
   } catch(e) {
     document.getElementById("patient-history").textContent = "Error: " + e.message;
     document.getElementById("patient-history").className = "patient-card error";
+  } finally {
+    if (resetBtn) {
+      resetBtn.disabled = false;
+      resetBtn.textContent = originalResetLabel || "🔄 New Patient Case";
+    }
   }
 }
 
@@ -1146,6 +1166,14 @@ function buildAction() {
 }
 
 async function submitAction() {
+  const submitBtn = document.getElementById("submit-btn");
+  const aiBtn = document.getElementById("ai-btn");
+  const originalSubmitLabel = submitBtn ? submitBtn.textContent : "";
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "⏳ Scoring...";
+  }
+  if (aiBtn) aiBtn.disabled = true;
   const action = buildAction();
   document.getElementById("result-section").innerHTML = '<div class="loading">Grading response...</div>';
 
@@ -1162,6 +1190,7 @@ async function submitAction() {
     state.step++;
     renderResult(obs, reward, done, d.info || {});
     log(`Step ${state.step}: reward=${reward.toFixed(3)} done=${done}`);
+    logDivider(done ? `Episode complete · final reward ${reward.toFixed(3)}` : `Step ${state.step} complete`);
 
     if (!done && state.task_id==="deteriorating_patient") {
       // Update patient history for next step
@@ -1174,6 +1203,12 @@ async function submitAction() {
     }
   } catch(e) {
     document.getElementById("result-section").innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalSubmitLabel || "📋 Step 4: Submit & Score";
+    }
+    if (aiBtn) aiBtn.disabled = false;
   }
 }
 

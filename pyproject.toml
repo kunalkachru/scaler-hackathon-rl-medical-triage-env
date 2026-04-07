@@ -7,7 +7,7 @@ name = "medical-triage-env"
 version = "2.0.0"
 description = "OpenEnv RL environment for clinical triage. NHS NEWS2 graders, demographic fairness testing, multi-turn deterioration detection. Research-grounded (Nature Medicine 2025, Oxford 2026, MIMIC-III)."
 authors = [{name = "Team Falcons", email = "team@falcons.ai"}]
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 readme = "README.md"
 license = {text = "MIT"}
 keywords = ["openenv", "reinforcement-learning", "medical", "triage", "healthcare", "fairness"]
@@ -23,7 +23,7 @@ dependencies = [
     "openai>=2.7.2",
     "requests>=2.32.0",
     "httpx>=0.27.0",
-    "openenv-core>=0.2.0",
+    "openenv>=0.2.0; python_version < '0'",
     "huggingface_hub>=0.20.0",
 ]
 

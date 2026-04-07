@@ -25,6 +25,8 @@ def test_web_ui_contains_ai_button_and_status_ids():
     # New wired IDs
     assert 'id="ai-btn"' in html
     assert 'id="ai-status"' in html
+    assert 'id="submit-btn"' in html
+    assert 'id="reset-btn"' in html
 
     # Legacy dead IDs should not exist
     assert 'id="agent-btn"' not in html
@@ -38,9 +40,19 @@ def test_web_ui_contains_case_select_population_hooks():
 
     assert 'id="task-select"' in html
     assert 'id="case-select"' in html
+    assert 'id="case-select-hint"' in html
     assert 'async function populateCaseSelect()' in html
     assert 'onTaskSelectionChange' in html
     assert "fetch('/tasks')" in html
+
+
+def test_web_ui_has_episode_history_demarcation_hook():
+    resp = client.get('/web')
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert 'function logDivider(label)' in html
+    assert 'Episode complete · final reward' in html
 
 
 def test_web_ui_uses_session_id_for_isolated_episodes():
@@ -59,7 +71,7 @@ def test_web_ui_placeholder_metrics_match_current_counts():
     html = resp.text
 
     assert '>28<' in html
-    assert '>110<' in html
+    assert '>111<' in html
 
 
 def test_web_ui_task_switch_clears_stale_form_state():
