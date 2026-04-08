@@ -23,6 +23,18 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **Version** | v2.0.0 |
 | **Tests** | 119 passing |
 
+### Demo (UI)
+
+<p align="center">
+  <img src="assets/github-demo-screenshot.png" alt="Medical Triage Environment — web UI" width="920">
+</p>
+
+<p align="center">
+  <video src="assets/github-demo.webm" controls muted playsinline width="920"></video>
+</p>
+
+<p align="center"><sub>Regenerate: <code>python scripts/capture_github_demo.py</code> (requires Playwright + Chromium).</sub></p>
+
 For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
 
