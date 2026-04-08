@@ -237,8 +237,10 @@ class TestDeterioratingPatientGrader:
         case = DETERIORATION_CASES[0]
         entry = case["timeline"][1]  # T=30
         response = {"action": "monitor", "rationale": "appears stable enough"}
-        score, _ = grade_deteriorating_patient_step(response, entry, 1, case)
-        assert score == 0.0, f"Missing critical deterioration at T=30 must score 0.0, got {score}"
+        score, breakdown = grade_deteriorating_patient_step(response, entry, 1, case)
+        assert breakdown.get("_raw_step") == 0.0, (
+            f"Missing critical deterioration at T=30 must raw-score 0.0, got {breakdown.get('_raw_step')}")
+        assert score == TASK_SCORE_OPEN_EPS, f"API-mapped miss must be open-interval floor, got {score}"
 
     def test_late_catch_at_t60_scores_partial(self):
         """

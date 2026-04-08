@@ -14,6 +14,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
+from models import TASK_SCORE_OPEN_EPS
 from server.graders import (
     compute_news2,
     news2_to_priority,
@@ -22,6 +23,7 @@ from server.graders import (
     grade_conflicting_vitals,
     grade_masked_deterioration,
     grade_response,
+    grade_response_raw,
 )
 from server.cases import SIMPLE_TRIAGE_CASES, CONFLICTING_VITALS_CASES, MASKED_DETERIORATION_CASES
 
@@ -421,13 +423,15 @@ class TestGradeDispatch:
             assert isinstance(score, float)
 
     def test_unknown_task_returns_zero(self):
-        """Unknown task_id should return 0.0 with error info."""
-        score, breakdown = grade_response("unknown_task", {}, SIMPLE_TRIAGE_CASES[0])
-        assert score == 0.0
+        """Unknown task_id: raw dispatch is 0.0; public grade_response maps to open-interval floor."""
+        raw, breakdown = grade_response_raw("unknown_task", {}, SIMPLE_TRIAGE_CASES[0])
+        assert raw == 0.0
         assert "error" in breakdown
+        score, _ = grade_response("unknown_task", {}, SIMPLE_TRIAGE_CASES[0])
+        assert score == TASK_SCORE_OPEN_EPS
 
     def test_score_always_in_range(self):
-        """All graders must return scores in [0.0, 1.0]."""
+        """grade_response() scores are strictly in (0, 1) for hackathon validators."""
         for task_id, cases in [
             ("simple_triage", SIMPLE_TRIAGE_CASES),
             ("conflicting_vitals", CONFLICTING_VITALS_CASES),
@@ -436,8 +440,8 @@ class TestGradeDispatch:
             for case in cases:
                 for response in [{}, {"priority": "low"}, {"priority": "critical", "news2_score": 15}]:
                     score, _ = grade_response(task_id, response, case)
-                    assert 0.0 <= score <= 1.0, \
-                        f"{task_id}/{case['case_id']}: score {score} out of range"
+                    assert TASK_SCORE_OPEN_EPS <= score <= 1.0 - TASK_SCORE_OPEN_EPS, \
+                        f"{task_id}/{case['case_id']}: score {score} out of (0,1)"
 
 
 if __name__ == "__main__":

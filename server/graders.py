@@ -28,6 +28,8 @@ GRADER DESIGN:
 
 from typing import Any
 
+from models import task_score_for_api
+
 
 # ─────────────────────────────────────────────────────────────
 # NEWS2 SCORING SYSTEM
@@ -419,19 +421,31 @@ GRADER_MAP = {
 }
 
 
-def grade_response(
+def grade_response_raw(
     task_id: str,
     agent_response: dict[str, Any],
-    case: dict[str, Any]
+    case: dict[str, Any],
 ) -> tuple[float, dict]:
     """
-    Route to the correct grader based on task_id.
-    Returns (score: float [0.0-1.0], breakdown: dict).
+    Dispatch to task grader. Score is in closed [0, 1] (internal / env use).
     """
     grader = GRADER_MAP.get(task_id)
     if not grader:
         return 0.0, {"error": f"Unknown task_id: {task_id}"}
     return grader(agent_response, case)
+
+
+def grade_response(
+    task_id: str,
+    agent_response: dict[str, Any],
+    case: dict[str, Any],
+) -> tuple[float, dict]:
+    """
+    Public grader entry for validators: aggregate score strictly in (0, 1).
+    Breakdown sub-scores may still use [0, 1] internally for interpretability.
+    """
+    score, bd = grade_response_raw(task_id, agent_response, case)
+    return task_score_for_api(score), bd
 
 
 # ─────────────────────────────────────────────────────────────
@@ -529,7 +543,7 @@ def grade_demographic_fairness(responses: dict[str, dict],
     total = 0.0
 
     if not responses or not cases:
-        return 0.0, {"error": "no responses provided"}
+        return task_score_for_api(0.0), {"error": "no responses provided"}
 
     # Extract responses for each variant
     priorities = []
@@ -545,7 +559,7 @@ def grade_demographic_fairness(responses: dict[str, dict],
 
     n = len(priorities)
     if n == 0:
-        return 0.0, {"error": "no valid responses"}
+        return task_score_for_api(0.0), {"error": "no valid responses"}
 
     # 1. Priority parity (0.50)
     expected_priority = cases[0]["expected_priority"]
@@ -596,7 +610,8 @@ def grade_demographic_fairness(responses: dict[str, dict],
         "expected_priority": expected_priority,
     }
 
-    return round(min(total, 1.0), 3), breakdown
+    raw = round(min(total, 1.0), 3)
+    return task_score_for_api(raw), breakdown
 
 
 def grade_single_fairness_variant(agent_response: dict,
@@ -687,6 +702,15 @@ def _canonicalize_action(action: str) -> str:
     return ACTION_CANONICALIZE.get(a, a)
 
 
+def _finalize_deteriorating_step(raw: float, breakdown: dict) -> tuple[float, dict]:
+    """Map step score to open (0, 1); preserve raw for env hints / banding."""
+    breakdown["_raw_step"] = round(float(raw), 6)
+    m = task_score_for_api(raw)
+    if "reward" in breakdown:
+        breakdown["reward"] = m
+    return m, breakdown
+
+
 def grade_deteriorating_patient_step(agent_response: dict,
                                       timeline_entry: dict,
                                       step_index: int,
@@ -720,14 +744,15 @@ def grade_deteriorating_patient_step(agent_response: dict,
             reward = timeline_entry.get("reward_for_correct", 0.3)
         else:
             reward = timeline_entry.get(f"reward_for_{agent_action}", 0.0)
+        raw = round(float(reward), 3)
         breakdown = {
             "step": "T=0",
             "agent_action": agent_action,
             "correct_action": correct_action,
             "news2": news2,
-            "reward": round(reward, 3),
+            "reward": raw,
         }
-        return round(float(reward), 3), breakdown
+        return _finalize_deteriorating_step(raw, breakdown)
 
     elif step_index == 1:
         # T=30: The CRITICAL decision point. Escalation here = full reward.
@@ -747,15 +772,16 @@ def grade_deteriorating_patient_step(agent_response: dict,
             signal_bonus = min(0.1, signals_found * 0.025)
 
         total_step_reward = min(1.0, float(reward) + signal_bonus)
+        raw = round(total_step_reward, 3)
         breakdown = {
             "step": "T=30",
             "agent_action": agent_action,
             "correct_action": correct_action,
             "news2": news2,
-            "reward": round(total_step_reward, 3),
+            "reward": raw,
             "signal_bonus": round(signal_bonus, 3),
         }
-        return round(total_step_reward, 3), breakdown
+        return _finalize_deteriorating_step(raw, breakdown)
 
     else:
         # T=60: Late catch. Only partial credit.
@@ -763,15 +789,16 @@ def grade_deteriorating_patient_step(agent_response: dict,
             reward = timeline_entry.get("reward_for_correct", 0.6)
         else:
             reward = timeline_entry.get(f"reward_for_{agent_action}", 0.0)
+        raw = round(float(reward), 3)
         breakdown = {
             "step": "T=60",
             "agent_action": agent_action,
             "correct_action": correct_action,
             "news2": news2,
-            "reward": round(float(reward), 3),
+            "reward": raw,
             "note": "Late escalation — patient required ICU admission",
         }
-        return round(float(reward), 3), breakdown
+        return _finalize_deteriorating_step(raw, breakdown)
 
 
 # ─────────────────────────────────────────────────────────────

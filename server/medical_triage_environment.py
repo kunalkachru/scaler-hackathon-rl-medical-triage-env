@@ -13,7 +13,7 @@ import random
 from typing import Any, Optional
 
 from server.cases import CASE_BANK, ALL_TASKS, get_cases_for_task
-from server.graders import (grade_response, grade_confidence_calibration,
+from server.graders import (grade_response_raw, grade_confidence_calibration,
                              grade_deteriorating_patient_step)
 from models import (
     TriageAction,
@@ -189,7 +189,7 @@ class MedicalTriageEnvironment:
             return StepResult(observation=obs, reward=r, done=True, info={})
 
         # Grade
-        score, breakdown = grade_response(task_id, action_dict, self._current_case)
+        score, breakdown = grade_response_raw(task_id, action_dict, self._current_case)
 
         # Confidence calibration bonus (up to +0.05, see grade_confidence_calibration)
         confidence = action_dict.get("confidence")
@@ -251,9 +251,9 @@ class MedicalTriageEnvironment:
             return StepResult(observation=obs, reward=r, done=True, info={})
 
         current_entry = timeline[step_idx]
-        raw_step, breakdown = grade_deteriorating_patient_step(
+        score, breakdown = grade_deteriorating_patient_step(
             action_dict, current_entry, step_idx, self._current_case)
-        score = task_score_for_api(raw_step)
+        raw_step = float(breakdown.get("_raw_step", score))
 
         self._state.cumulative_reward += score
 
