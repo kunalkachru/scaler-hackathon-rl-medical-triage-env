@@ -15,8 +15,9 @@ MANDATORY
 STDOUT FORMAT
 The script emits exactly these line types:
   [START] task=<task_name> env=<benchmark> model=<model_name>
-  [STEP]  step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
-  [END]   success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
+  [STEP]  step=<n> action=<action_str> reward=<float> done=<true|false> error=<msg|null>
+  [END]   success=<true|false> steps=<n> score=<float> rewards=<r1,r2,...,rn>
+Reward/score fields use 4 decimal places so values in (0,1) never round to 0.00 or 1.00.
 """
 
 import json
@@ -96,15 +97,15 @@ def log_start(task: str, env: str, model: str) -> None:
 def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     error_val = "null" if not error else error
     print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error_val}",
+        f"[STEP] step={step} action={action} reward={reward:.4f} done={str(done).lower()} error={error_val}",
         flush=True,
     )
 
 
 def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> None:
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    rewards_str = ",".join(f"{r:.4f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.4f} rewards={rewards_str}",
         flush=True,
     )
 

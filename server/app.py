@@ -360,11 +360,13 @@ async def grade_fairness(request: FairnessGradeRequest):
     if not group_cases:
         raise HTTPException(status_code=404, detail=f"No cases found for group '{request.group_id}'")
 
+    from models import observation_score_breakdown_for_api
+
     score, breakdown = grade_demographic_fairness(request.responses, group_cases)
     return {
         "group_id": request.group_id,
         "score": score,
-        "breakdown": {k: v for k, v in breakdown.items() if not k.startswith("_")},
+        "breakdown": observation_score_breakdown_for_api(breakdown) or {},
         "detail": breakdown.get("_responses", {}),
         "case_count": len(group_cases),
     }

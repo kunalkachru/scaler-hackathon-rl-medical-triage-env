@@ -22,6 +22,7 @@ from models import (
     StepResult,
     ResetRequest,
     task_score_for_api,
+    observation_score_breakdown_for_api,
 )
 
 TASK_DESCRIPTIONS = {
@@ -153,8 +154,9 @@ class MedicalTriageEnvironment:
             case_id=self._current_case["case_id"],
             available_tasks=ALL_TASKS,
         )
+        rr = task_score_for_api(0.0)
         return StepResult(
-            observation=observation, reward=task_score_for_api(0.0), done=False,
+            observation=observation, reward=rr, done=False,
             info={"episode_id": episode_id, "task_id": task_id,
                   "case_id": self._current_case["case_id"], "max_steps": max_steps}
         )
@@ -181,7 +183,7 @@ class MedicalTriageEnvironment:
             obs = TriageObservation(
                 patient_history=self._current_case.get("history", ""),
                 task_id=task_id, task_description=TASK_DESCRIPTIONS[task_id],
-                score=r, score_breakdown={"reason": "empty_response"},
+                score=r, score_breakdown=observation_score_breakdown_for_api({"reason": "empty_response"}),
                 feedback="No meaningful assessment provided.", done=True,
                 step_number=self._state.step_count,
                 case_id=self._current_case["case_id"],
@@ -220,7 +222,8 @@ class MedicalTriageEnvironment:
         obs = TriageObservation(
             patient_history=self._current_case["history"],
             task_id=task_id, task_description=TASK_DESCRIPTIONS[task_id],
-            score=reward, score_breakdown=breakdown, feedback=feedback,
+            score=reward, score_breakdown=observation_score_breakdown_for_api(breakdown),
+            feedback=feedback,
             done=True, step_number=self._state.step_count,
             case_id=self._current_case["case_id"], hint=hint,
         )
@@ -290,7 +293,8 @@ class MedicalTriageEnvironment:
             patient_history=next_history,
             task_id="deteriorating_patient",
             task_description=TASK_DESCRIPTIONS["deteriorating_patient"],
-            score=score, score_breakdown=breakdown, feedback=feedback,
+            score=score, score_breakdown=observation_score_breakdown_for_api(breakdown),
+            feedback=feedback,
             done=is_done, step_number=self._state.step_count,
             case_id=self._current_case["case_id"], hint=hint,
         )

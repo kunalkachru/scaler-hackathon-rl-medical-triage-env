@@ -16,7 +16,7 @@ WHY THIS FILE EXISTS:
   - OpenAPI schema generation (free /docs page on HF Space)
 """
 
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
@@ -42,6 +42,30 @@ def task_score_for_api(raw: float) -> float:
     if x >= hi:
         return hi
     return round(x, 6)
+
+
+def _sanitize_unit_interval_floats(obj: Any) -> Any:
+    """Recursively map floats in [0, 1] to open (0, 1) for validator-visible payloads."""
+    if isinstance(obj, float):
+        if 0.0 <= obj <= 1.0:
+            return task_score_for_api(obj)
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_unit_interval_floats(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_unit_interval_floats(x) for x in obj]
+    return obj
+
+
+def observation_score_breakdown_for_api(bd: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Observation breakdown for HTTP: strip internal '_*' keys (e.g. _raw_step) and
+    remap any [0, 1] floats so validators that scan sub-scores never see 0.0 or 1.0.
+    """
+    if bd is None:
+        return None
+    public = {k: v for k, v in bd.items() if not str(k).startswith("_")}
+    return _sanitize_unit_interval_floats(public)
 
 
 # ─────────────────────────────────────────────────────────────

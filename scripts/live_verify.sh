@@ -66,7 +66,9 @@ python - <<'PY' "$tmpdir/reset.json" "$SESSION_ID"
 import json, sys
 d=json.load(open(sys.argv[1])); sid=sys.argv[2]
 assert d.get("info",{}).get("session_id")==sid, f"Session mismatch: {d.get('info',{})}"
-print("  ok: session_id=", sid, "episode_id=", d.get("info",{}).get("episode_id"))
+rr=d.get("reward",-1)
+assert 0.0 < rr < 1.0, f"Reset reward must lie strictly in (0,1), got {rr}"
+print("  ok: session_id=", sid, "episode_id=", d.get("info",{}).get("episode_id"), "reward=", rr)
 PY
 
 echo "[5/10] Step endpoint"
