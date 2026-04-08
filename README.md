@@ -21,7 +21,7 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **API base URL** | https://kunalkachru23-medical-triage-env.hf.space |
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
 | **Version** | v2.0.0 |
-| **Tests** | 116 passing |
+| **Tests** | 119 passing |
 
 For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
@@ -655,7 +655,7 @@ medical-triage-env/
 
 **Team Falcons** — Scaler × Meta PyTorch OpenEnv Hackathon 2026  
 - Kunal Kachru (Team Lead)
-- Sandhya Tripathi
+- ~~Sandhya Tripathi~~ (Dropped out)
 
 ---
 
