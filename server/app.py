@@ -35,7 +35,7 @@ import uvicorn
 from server.medical_triage_environment import MedicalTriageEnvironment
 from models import (
     ResetRequest, StepRequest, StepResult, TriageState,
-    TriageObservation
+    TriageObservation, TASK_SCORE_OPEN_EPS, safe_cumulative_for_api,
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -118,14 +118,18 @@ class EpisodeHistory:
         self._episodes = deque(maxlen=maxlen)
 
     def record(self, task_id: str, case_id: str, reward: float, breakdown: dict):
+        from models import task_score_for_api, _sanitize_unit_interval_floats
+        safe_reward = task_score_for_api(reward)
         self._episodes.append({
             "n":        len(self._episodes) + 1,
             "task_id":  task_id,
             "case_id":  case_id,
-            "reward":   round(reward, 3),
+            "reward":   safe_reward,
             "ts":       round(_time.time()),
-            "breakdown": {k: v for k, v in (breakdown or {}).items()
-                         if isinstance(v, (int, float)) and not k.startswith("_")},
+            "breakdown": _sanitize_unit_interval_floats(
+                {k: v for k, v in (breakdown or {}).items()
+                 if isinstance(v, (int, float)) and not k.startswith("_")}
+            ),
         })
 
     def as_list(self):
@@ -140,10 +144,10 @@ class EpisodeHistory:
             by_task.setdefault(e["task_id"], []).append(e["reward"])
         return {
             "total_episodes": len(eps),
-            "overall_avg":    round(sum(e["reward"] for e in eps) / len(eps), 3),
+            "overall_avg":    round(sum(e["reward"] for e in eps) / len(eps), 4),
             "best_score":     max(e["reward"] for e in eps),
             "by_task": {
-                t: {"count": len(scores), "avg": round(sum(scores)/len(scores), 3),
+                t: {"count": len(scores), "avg": round(sum(scores)/len(scores), 4),
                     "best": max(scores), "latest": scores[-1]}
                 for t, scores in by_task.items()
             }
@@ -278,22 +282,22 @@ async def get_metrics():
 
     def _percentile(data: list[float], p: float) -> float:
         if not data:
-            return 0.0
+            return TASK_SCORE_OPEN_EPS
         data = sorted(data)
         idx = (len(data) - 1) * p / 100
         lo, hi = int(idx), min(int(idx) + 1, len(data) - 1)
-        return round(data[lo] + (data[hi] - data[lo]) * (idx - lo), 3)
+        return round(data[lo] + (data[hi] - data[lo]) * (idx - lo), 4)
 
     task_metrics = {}
     for tid, scores in by_task.items():
         task_metrics[tid] = {
             "count":  len(scores),
-            "avg":    round(sum(scores) / len(scores), 3),
-            "min":    round(min(scores), 3),
-            "max":    round(max(scores), 3),
+            "avg":    round(sum(scores) / len(scores), 4),
+            "min":    round(min(scores), 4),
+            "max":    round(max(scores), 4),
             "p25":    _percentile(scores, 25),
             "p75":    _percentile(scores, 75),
-            "latest": round(scores[-1], 3),
+            "latest": round(scores[-1], 4),
         }
 
     # Difficulty gradient: easy tasks should score higher on average than hard tasks
@@ -321,7 +325,11 @@ async def state(session_id: Optional[str] = None):
     Pass session_id (from reset info) as a query param for session-specific state.
     """
     _, env_inst = sessions.get_or_create(session_id)
-    return env_inst.state
+    s = env_inst.state
+    # Sanitize cumulative_reward so validators never see exact 0.0 or 1.0
+    sanitized = s.model_dump()
+    sanitized["cumulative_reward"] = safe_cumulative_for_api(s.cumulative_reward)
+    return sanitized
 
 
 # ─────────────────────────────────────────────────────────────

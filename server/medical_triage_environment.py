@@ -23,6 +23,8 @@ from models import (
     ResetRequest,
     task_score_for_api,
     observation_score_breakdown_for_api,
+    TASK_SCORE_OPEN_EPS,
+    safe_cumulative_for_api,
 )
 
 TASK_DESCRIPTIONS = {
@@ -230,7 +232,7 @@ class MedicalTriageEnvironment:
         return StepResult(
             observation=obs, reward=reward, done=True,
             info={"task_id": task_id, "case_id": self._current_case["case_id"],
-                  "cumulative_reward": round(self._state.cumulative_reward, 3),
+                  "cumulative_reward": safe_cumulative_for_api(self._state.cumulative_reward),
                   "ground_truth": self._current_case.get("ground_truth")}
         )
 
@@ -302,7 +304,7 @@ class MedicalTriageEnvironment:
             observation=obs, reward=score, done=is_done,
             info={"step_time": current_entry["time"], "agent_action": agent_action,
                   "correct_action": current_entry.get("correct_action"),
-                  "cumulative_reward": round(self._state.cumulative_reward, 3),
+                  "cumulative_reward": safe_cumulative_for_api(self._state.cumulative_reward),
                   "ground_truth": self._current_case.get("ground_truth") if is_done else None}
         )
 

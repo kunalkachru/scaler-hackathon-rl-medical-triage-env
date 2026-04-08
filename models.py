@@ -57,6 +57,17 @@ def _sanitize_unit_interval_floats(obj: Any) -> Any:
     return obj
 
 
+def safe_cumulative_for_api(x: float) -> float:
+    """
+    Safely serialize cumulative_reward for HTTP responses.
+    Values in [0, 1] are remapped to the open interval via task_score_for_api.
+    Values outside [0, 1] (multi-step episodes can exceed 1.0) are returned rounded.
+    """
+    if 0.0 <= x <= 1.0:
+        return task_score_for_api(x)
+    return round(x, 4)
+
+
 def observation_score_breakdown_for_api(bd: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
     Observation breakdown for HTTP: strip internal '_*' keys (e.g. _raw_step) and
