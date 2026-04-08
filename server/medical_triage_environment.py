@@ -154,7 +154,7 @@ class MedicalTriageEnvironment:
             available_tasks=ALL_TASKS,
         )
         return StepResult(
-            observation=observation, reward=0.0, done=False,
+            observation=observation, reward=task_score_for_api(0.0), done=False,
             info={"episode_id": episode_id, "task_id": task_id,
                   "case_id": self._current_case["case_id"], "max_steps": max_steps}
         )

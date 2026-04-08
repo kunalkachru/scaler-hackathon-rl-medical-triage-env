@@ -50,10 +50,10 @@ class TestEnvironmentReset:
         assert r1.observation.patient_history == r2.observation.patient_history
 
     def test_reset_initializes_reward_to_zero(self):
-        """Reset should return reward=0.0."""
+        """Reset reward must be strictly in (0, 1) — Phase 2 requires open interval."""
         env = MedicalTriageEnvironment()
         result = env.reset()
-        assert result.reward == 0.0
+        assert 0.0 < result.reward < 1.0
 
     def test_reset_done_is_false(self):
         """After reset, done must be False."""
@@ -210,7 +210,7 @@ class TestEpisodeFlows:
         # reset
         r = env.reset(ResetRequest(task_id="simple_triage", seed=1))
         assert r.observation.task_id == "simple_triage"
-        assert r.reward == 0.0
+        assert 0.0 < r.reward < 1.0
         assert not r.done
 
         # step

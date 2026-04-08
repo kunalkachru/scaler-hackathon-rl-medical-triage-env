@@ -168,7 +168,7 @@ class TriageObservation(BaseModel):
     # Feedback after step()
     score: Optional[float] = Field(
         default=None,
-        ge=0.0, le=1.0,
+        gt=0.0, lt=1.0,
         description="Score for this step; emitted values lie strictly in (0,1) per Phase 2 validation"
     )
     score_breakdown: Optional[dict[str, Any]] = Field(
@@ -356,6 +356,6 @@ class StepInfo(BaseModel):
 class StepResult(BaseModel):
     """Response from POST /step and POST /reset"""
     observation: TriageObservation
-    reward: float = Field(ge=0.0, le=1.0, default=0.0)
+    reward: float = Field(gt=0.0, lt=1.0, default=TASK_SCORE_OPEN_EPS)
     done: bool = False
     info: StepInfo = Field(default_factory=StepInfo)

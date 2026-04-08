@@ -502,7 +502,7 @@ class TestAllFiveTasksIntegration:
                      "demographic_fairness", "deteriorating_patient"]:
             r = env.reset(ResetRequest(task_id=task))
             assert r.observation.task_id == task
-            assert r.reward == 0.0
+            assert 0.0 < r.reward < 1.0
             assert not r.done
             assert len(r.observation.patient_history) > 50
 
