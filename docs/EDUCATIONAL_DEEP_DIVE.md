@@ -2,7 +2,7 @@
 
 ## Why this document exists
 
-This guide is for learning. It explains this project from first principles to implementation details:
+This guide is for learning and for reviewers who want the full narrative. It explains this project from first principles to implementation details:
 - what problem we are solving
 - how reinforcement learning (RL) fits
 - what each component does

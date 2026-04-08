@@ -45,6 +45,7 @@ Safari does **not** play WebM inline; use the **MP4** link above. On the GitHub 
 
 For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
+- [`docs/EDUCATIONAL_DEEP_DIVE.md`](docs/EDUCATIONAL_DEEP_DIVE.md) — long-form narrative / learning walkthrough
 
 ---
 
@@ -66,6 +67,9 @@ Medical triage is a task humans do every day with life-or-death consequences. Tr
 ```bash
 git clone https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env.git
 cd medical-triage-env
+
+# Optional: env template for HF setup + inference (copy and fill — never commit .env)
+cp .env.example .env
 
 python3 -m venv venv
 source venv/bin/activate          # Linux/Mac
@@ -641,6 +645,7 @@ medical-triage-env/
 ├── client.py                 ← Python HTTP client wrapper for programmatic use
 ├── openenv.yaml              ← OpenEnv manifest (HF Space metadata + task list)
 ├── Dockerfile                ← Docker build — python:3.12-slim, port 7860, HEALTHCHECK
+├── .env.example              ← Environment variable names only (copy to .env; .env is gitignored)
 ├── setupCredentials.py       ← Helper to configure HF Space runtime secrets/variables
 ├── __init__.py
 ├── server/
@@ -663,8 +668,8 @@ medical-triage-env/
 │   ├── live_verify.sh        ← Live API verification pack for deployed Space
 │   ├── browser_ui_smoke.py   ← Headless browser smoke test for deployed /web UX
 │   └── full_release_gate.sh  ← One-command release gate (local + baseline + deploy + live API + browser UI)
-├── tests/test_inference_contract.py ← Baseline reproducibility contract checks
 └── docs/
+    ├── EDUCATIONAL_DEEP_DIVE.md ← Long-form walkthrough (learning + reviewer narrative)
     ├── PROJECT_DOCUMENTATION.md ← Full evaluator runbook (architecture, setup, deployment, UI testing)
     └── TEST_REPORT.md        ← Exhaustive test narrative with case-wise validation evidence
 ```
