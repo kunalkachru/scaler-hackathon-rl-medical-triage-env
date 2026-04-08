@@ -6,9 +6,9 @@ set -o errtrace
 # Runs:
 #   1) local regression + OpenEnv validation
 #   2) baseline reproducibility check (inference.py)
-#   3) organizer pre-validation script parity check
-#   4) optional openenv push
-#   5) setupCredentials.py
+#   3) optional openenv push
+#   4) setupCredentials.py
+#   5) organizer pre-validation script parity check
 #   6) live API verification
 #   7) browser UI smoke verification
 #
@@ -30,6 +30,8 @@ SKIP_DEPLOY="false"
 SKIP_PLAYWRIGHT_INSTALL="false"
 CURRENT_STAGE="initialization"
 LAST_CMD=""
+DEPLOY_MAX_ATTEMPTS=3
+DEPLOY_INITIAL_DELAY_SEC=10
 
 usage() {
   cat <<'EOF'
@@ -188,6 +190,36 @@ run_cmd() {
   "$@"
 }
 
+run_with_retries() {
+  local max_attempts="$1"
+  local initial_delay="$2"
+  shift 2
+
+  local attempt=1
+  local delay="$initial_delay"
+
+  while (( attempt <= max_attempts )); do
+    LAST_CMD="$*"
+    if "$@"; then
+      if (( attempt > 1 )); then
+        echo "[release-gate] Command succeeded on retry #$((attempt - 1))."
+      fi
+      return 0
+    fi
+
+    if (( attempt == max_attempts )); then
+      break
+    fi
+
+    echo "[release-gate] Command failed (attempt ${attempt}/${max_attempts}). Retrying in ${delay}s..."
+    sleep "$delay"
+    delay=$(( delay * 2 ))
+    attempt=$(( attempt + 1 ))
+  done
+
+  return 1
+}
+
 require_cmd() {
   local cmd="$1"
   local install_hint="$2"
@@ -271,13 +303,11 @@ if missing:
 PY
 run_cmd python inference.py
 
-step "Organizer pre-validation parity"
-run_cmd ./scripts/validate-submission.sh "$BASE_URL" "."
-
 if [[ "$SKIP_DEPLOY" != "true" ]]; then
   step "Deploy to HF Space"
   echo "[release-gate] openenv push --repo-id $REPO_ID"
-  run_cmd openenv push --repo-id "$REPO_ID"
+  echo "[release-gate] deploy retries: up to ${DEPLOY_MAX_ATTEMPTS} attempts (backoff starts at ${DEPLOY_INITIAL_DELAY_SEC}s)"
+  run_with_retries "$DEPLOY_MAX_ATTEMPTS" "$DEPLOY_INITIAL_DELAY_SEC" openenv push --repo-id "$REPO_ID"
 else
   step "Deploy step skipped"
   echo "[release-gate] --skip-deploy enabled."
@@ -285,6 +315,9 @@ fi
 
 step "Sync Space credentials"
 run_cmd python setupCredentials.py
+
+step "Organizer pre-validation parity"
+run_cmd ./scripts/validate-submission.sh "$BASE_URL" "."
 
 step "Live API verification"
 LAST_CMD="BASE_URL=\"$BASE_URL\" EXPECT_LLM=\"$EXPECT_LLM\" ./scripts/live_verify.sh"
