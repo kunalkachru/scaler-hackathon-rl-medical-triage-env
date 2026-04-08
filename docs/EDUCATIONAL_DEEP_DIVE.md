@@ -141,7 +141,7 @@ RL contribution:
 ### B) `server/graders.py` - reward engine
 
 Primary function:
-- converts agent response into numeric score in `[0.0, 1.0]`
+- converts agent response into numeric score in `[0.0, 1.0]` (internal); the environment maps to **open** `(0, 1)` on the HTTP API (`task_score_for_api` in `models.py`)
 
 Logic:
 - computes NEWS2 and related scoring dimensions

@@ -65,6 +65,7 @@ endpoints:
   grade_fairness: POST /grade-fairness
   metrics: GET /metrics
 
-reward_range: [0.0, 1.0]
+# Returned step/task scores are remapped to the open interval (0, 1); see models.task_score_for_api
+reward_range: [0.0001, 0.9999]
 max_steps_per_episode: 3
 total_cases: 28

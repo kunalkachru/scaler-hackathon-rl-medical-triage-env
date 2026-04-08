@@ -21,6 +21,30 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 # ─────────────────────────────────────────────────────────────
+# API task scores — Hackathon Phase 2 (strict open interval)
+# ─────────────────────────────────────────────────────────────
+# Validators require each **returned** task / step score to lie strictly in (0, 1),
+# not 0.0 or 1.0. Graders still compute in [0, 1]; we remap at the environment
+# and fairness API boundary only.
+
+TASK_SCORE_OPEN_EPS = 1e-4
+
+
+def task_score_for_api(raw: float) -> float:
+    """Map a closed [0, 1] grader value to the open interval (0, 1) for HTTP/API."""
+    x = float(raw)
+    if x != x:  # NaN
+        return TASK_SCORE_OPEN_EPS
+    x = max(0.0, min(1.0, x))
+    lo, hi = TASK_SCORE_OPEN_EPS, 1.0 - TASK_SCORE_OPEN_EPS
+    if x <= lo:
+        return lo
+    if x >= hi:
+        return hi
+    return round(x, 6)
+
+
+# ─────────────────────────────────────────────────────────────
 # ACTION — what the agent sends to the environment
 # ─────────────────────────────────────────────────────────────
 
@@ -145,7 +169,7 @@ class TriageObservation(BaseModel):
     score: Optional[float] = Field(
         default=None,
         ge=0.0, le=1.0,
-        description="Score for this step: 0.0 (completely wrong) to 1.0 (perfect)"
+        description="Score for this step; emitted values lie strictly in (0,1) per Phase 2 validation"
     )
     score_breakdown: Optional[dict[str, Any]] = Field(
         default=None,

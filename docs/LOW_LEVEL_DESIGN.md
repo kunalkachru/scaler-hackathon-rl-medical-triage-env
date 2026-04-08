@@ -336,6 +336,6 @@ When adding a new task:
 
 When changing scoring:
 1. Update grader function and breakdown keys.
-2. Keep reward bounds in `[0.0, 1.0]`.
+2. Keep **grader** outputs in `[0.0, 1.0]`; apply `task_score_for_api()` for any **HTTP** `reward` / `observation.score` (open interval `(0, 1)`).
 3. Update tests and docs to maintain evaluator traceability.
 

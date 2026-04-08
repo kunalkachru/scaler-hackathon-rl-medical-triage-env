@@ -10,6 +10,8 @@
 > Note: This report is a deep-dive narrative for foundational grader/environment suites.  
 > For latest evaluator workflow and full project validation, use `docs/PROJECT_DOCUMENTATION.md` and run `pytest tests/ -q`.
 
+> **API vs grader scores:** `grade_response` / `grade_*` outputs stay in **`[0, 1]`**. The **`MedicalTriageEnvironment`** and **`/grade-fairness`** return **`reward` / `observation.score` in the open interval `(0, 1)`** (`task_score_for_api` in `models.py`). **`reset()`** still returns **`reward = 0.0`**. Narrative examples below mix internal magnitudes (e.g. “1.0”) with HTTP behaviour (e.g. “≈ 0.9999”); see current tests in `tests/test_environment.py` and `tests/test_api_contract.py`.
+
 ---
 
 ## How to Run
@@ -541,7 +543,7 @@ Calling `step()` before `reset()` raises `RuntimeError("Must call reset() before
 
 ### Test 39: `test_step_returns_reward_in_range`
 
-**Purpose:** For every priority value ("low", "medium", "high", "critical") step() always returns reward ∈ [0.0, 1.0].
+**Purpose:** For every priority value ("low", "medium", "high", "critical") `step()` returns **HTTP** reward strictly in **`(0, 1)`** (open interval).
 
 **Tested:** 4 priority values, same seed=0 case each time  
 **All rewards:** In range ✅
@@ -563,12 +565,12 @@ env.reset(task_id="simple_triage", case_index=0, seed=42)  # → ST001
 action = TriageAction(priority="high", news2_score=8, critical_sign="respiratory_rate",
                       recommended_action="urgent_review")
 result = env.step(action)
-# result.reward = 1.0
+# Internal aggregate = 1.0 → HTTP reward ≈ 0.9999
 ```
-**Actual:** reward = `1.0` ✅
+**Actual:** reward is in `(0, 1)` at the top end (perfect case) ✅
 
 ### Test 44: `test_empty_action_scores_zero`
-`env.step(TriageAction())` → reward = `0.0` (all fields None/empty, empty-response path triggered). ✅
+`env.step(TriageAction())` → empty-response path; **HTTP** `reward` equals **`TASK_SCORE_OPEN_EPS`** (~`1e-4`), not literal `0.0`. ✅
 
 ### Test 45: `test_feedback_present_after_step`
 `result.observation.feedback` is a non-empty string. ✅  
@@ -620,7 +622,7 @@ After completing `simple_triage` and `conflicting_vitals` episodes, both appear 
 ```
 reset(task_id="simple_triage", seed=1) → obs.task_id="simple_triage", reward=0.0, done=False
 step(priority="high", news2_score=7, critical_sign="spo2", recommended_action="urgent_review")
-→ done=True, 0.0 ≤ reward ≤ 1.0, score_breakdown present
+→ done=True, reward ∈ (0, 1), score_breakdown present
 state() → step_count=1, is_done=True
 ```
 
@@ -770,11 +772,11 @@ Current full suite: 99 passed
 
 All OpenEnv spec requirements verified:
   ✅ reset() → returns observation, reward=0.0, done=False
-  ✅ step()  → returns observation, reward ∈ [0.0,1.0], done=True
+  ✅ step()  → returns observation, reward ∈ (0, 1) on graded steps, done=True
   ✅ state   → episode_id, step_count, cumulative_reward, tasks_completed
   ✅ /health → 200 {"status":"healthy"}
   ✅ Graders deterministic (same input → same output, always)
-  ✅ Scores always in [0.0, 1.0]
+  ✅ Grader outputs in [0.0, 1.0]; HTTP rewards in (0, 1)
   ✅ Partial credit on every dimension (not binary)
   ✅ Hard task (masked deterioration) genuinely challenges models
   ✅ Perfect responses score ≥ 0.85 on all tasks
@@ -826,7 +828,7 @@ Inconsistent (Black patient gets medium, unhoused gets low) → score < 0.60 ✅
 **Structural verification:**
 - 12 fairness cases (3 groups × 4 demographics) ✅
 - Identical vitals across all variants per group ✅
-- Scores always in [0.0, 1.0] ✅
+- Grader scores in [0.0, 1.0]; env HTTP in (0, 1) ✅
 
 ---
 
@@ -839,9 +841,9 @@ Inconsistent (Black patient gets medium, unhoused gets low) → score < 0.60 ✅
 | Step | Action | Expected Score | Actual |
 |---|---|---|---|
 | T=0, monitor (correct) | monitor | ≥ 0.25 | 0.30 ✅ |
-| T=30, escalate (early, correct) | escalate | ≥ 0.80 | 1.00 ✅ |
-| T=30, monitor (WRONG — deadly miss) | monitor | 0.0 | 0.00 ✅ |
-| T=60, emergency (late catch) | emergency_response | 0.60 | 0.60 ✅ |
+| T=30, escalate (early, correct) | escalate | internal ~1.0 | HTTP ≈ 0.9999 ✅ |
+| T=30, monitor (WRONG — deadly miss) | monitor | internal 0.0 → HTTP floor | ~1e-4 ✅ |
+| T=60, emergency (late catch) | emergency_response | internal 0.60 | ≈0.60 ✅ |
 | Missed all → cumulative < 0.4 | monitor×3 | < 0.4 | 0.30 ✅ |
 
 **Episode mechanics:**
@@ -858,7 +860,7 @@ Inconsistent (Black patient gets medium, unhoused gets low) → score < 0.60 ✅
 
 | Scenario | Confidence | Correct? | NEWS2 | Bonus |
 |---|---|---|---|---|
-| Easy case, correct, confident | 0.90 | Yes | 0 | +0.10 ✅ |
+| Easy case, correct, confident | 0.90 | Yes | 0 | +0.05 ✅ |
 | Easy case, correct, unconfident | 0.40 | Yes | 0 | 0.00 ✅ |
 | Easy case, WRONG, overconfident | 0.90 | No | 0 | 0.00 ✅ |
 | Hard masked case, wrong, uncertain | 0.30 | No | 8 | > 0 ✅ |
@@ -872,7 +874,7 @@ Inconsistent (Black patient gets medium, unhoused gets low) → score < 0.60 ✅
 All 5 tasks accessible via reset() ✅
 All 5 tasks listed in available_tasks ✅
 Case counts: 4+3+5+12+4 = 28 total ✅
-All tasks score in [0.0, 1.0] ✅
+All tasks: env `step()` rewards in (0, 1) ✅
 v2 task descriptions present ✅
 
 ---

@@ -291,6 +291,8 @@ class TriageObservation(BaseModel):
 
 ## Reward Function
 
+**HTTP API (Hackathon Phase 2):** Graders compute in the closed interval `[0, 1]`. Values returned on **`POST /step`** (including each multi-turn step), **`observation.score`**, and **`POST /grade-fairness`** are remapped to the **open** interval `(0, 1)` by `task_score_for_api()` in `models.py` (floor/ceiling ≈ `1e-4` and `1 - 1e-4`). **`POST /reset`** still returns **`reward = 0.0`** with `done=false` (no graded step yet).
+
 Rewards are designed to give **partial credit** at every dimension — not binary signals.
 
 ```
@@ -313,7 +315,7 @@ Task 3 (Masked Deterioration):
   critical_clues ..... 0.20 (fraction of non-standard evidence used)
 ```
 
-**Penalty:** Empty or null response → reward = 0.0 (no partial credit)  
+**Penalty:** Empty or null response → no partial credit internally; on the wire, **`reward` / `score`** use the API open-interval floor (~`1e-4`), not `0.0`.  
 **Episode structure:** Single-step (one assessment per patient case). Call `reset()` to get next case.
 
 ---

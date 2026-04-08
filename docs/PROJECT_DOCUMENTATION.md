@@ -185,7 +185,7 @@ Returned by `GET /state`. Tracks episode-level metadata:
 **Principles:**
 - Fully deterministic — same action on same case always gives same score
 - Partial credit at every dimension — not binary
-- All step rewards bounded in `[0.0, 1.0]`
+- Grader functions compute in **`[0.0, 1.0]`**; **HTTP** `reward` / `observation.score` / **`/grade-fairness`** are remapped to **`(0, 1)`** via `task_score_for_api()` (see `models.py`). **`/reset`** remains **`reward = 0.0`**.
 - Asymmetric under/over-triage penalty (under-triage penalised harder)
 - Optional confidence calibration bonus
 
@@ -432,11 +432,11 @@ The `/step` endpoint is hardened against unexpected agent inputs (relevant for P
 
 | Input | Behaviour |
 |---|---|
-| Empty action `{}` | 200, reward=0.0 |
-| `priority: null` | 200, coerced to `""`, reward=0.0 |
-| Unknown fields | 200, unknown fields ignored, reward=0.0 |
+| Empty action `{}` | 200, empty-response path; **HTTP** `reward`/`score` ∈ `(0,1)` at floor (~`1e-4`), not literal `0.0` |
+| `priority: null` | 200, coerced to `""`; scored like missing priority (typically low **HTTP** reward, still in `(0,1)` if episode ends) |
+| Unknown fields | 200, unknown fields ignored; reward depends on remaining fields (still **HTTP** `(0,1)` when graded) |
 | Very long rationale (8000+ chars) | 200, scored normally |
-| Unknown priority value | 200, reward=0.0 |
+| Unknown priority value | 200, low score; **HTTP** `(0,1)` |
 | No `session_id` | 200, uses default session (backward-compat) |
 | Nonexistent `session_id` | 400 (not 500) |
 | Double step on single-step task | 200 (not 500) |
@@ -485,9 +485,9 @@ The `/step` endpoint is hardened against unexpected agent inputs (relevant for P
 - Use `POST /grade-fairness` with both responses to get parity score
 
 **`deteriorating_patient` (multi-turn):**
-- Step 1 (T=0): choose monitor/escalate/emergency_response → reward=0.3 if correct
-- Step 2 (T=30): **critical moment** — escalate if vitals deteriorating → reward=1.0
-- If T=30 missed: Step 3 (T=60) available with partial credit (0.4–0.6)
+- Step 1 (T=0): choose monitor/escalate/emergency_response → internal `0.3` if correct (**HTTP** mapped into `(0,1)`)
+- Step 2 (T=30): **critical moment** — escalate if vitals deteriorating → internal up to `1.0` (**HTTP** just below `1.0`)
+- If T=30 missed: Step 3 (T=60) available with partial credit (internal 0.4–0.6, **HTTP** mapped)
 - Episode ends (done=True) when correct action taken or all 3 steps exhausted
 
 **Training Progress tab:**
@@ -625,7 +625,7 @@ The difficulty gradient is real and empirically confirmed: a 38–45% drop from 
 
 - Exact baseline scores may vary by model/provider/routing despite deterministic grader logic
 - For reproducible demonstrations, always pass `seed=42` and `case_index=<fixed>`
-- The confidence calibration bonus is up to +0.05 per step — does not affect [0,1] reward bound (reward is capped via Pydantic validator)
+- The confidence calibration bonus is up to +0.05 (`grade_confidence_calibration`); internal total is capped at `1.0`, then remapped to `(0,1)` for HTTP
 - Session TTL is 30 minutes; long-running evaluation loops should use explicit `session_id` management
 
 ---

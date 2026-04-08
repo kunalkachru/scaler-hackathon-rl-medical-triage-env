@@ -32,7 +32,7 @@ from server.cases import (
     FAIRNESS_CASES_FP001, FAIRNESS_CASES_FP002, FAIRNESS_CASES_FP003
 )
 from server.medical_triage_environment import MedicalTriageEnvironment
-from models import TriageAction, ResetRequest
+from models import TriageAction, ResetRequest, TASK_SCORE_OPEN_EPS
 
 
 # ─────────────────────────────────────────────────────────────
@@ -372,11 +372,11 @@ class TestDeterioratingPatientEnvironment:
 
         r1 = env.step(TriageAction(recommended_action="monitor"))  # T=30 — WRONG
         assert not r1.done, "Missed escalation should continue the episode"
-        assert r1.reward == 0.0
+        assert r1.reward == TASK_SCORE_OPEN_EPS
 
         r2 = env.step(TriageAction(recommended_action="emergency_response"))  # T=60
         assert r2.done, "T=60 should end the episode"
-        assert r2.reward == 0.6, f"Late catch should score 0.6, got {r2.reward}"
+        assert abs(r2.reward - 0.6) < 1e-5, f"Late catch should map ~0.6, got {r2.reward}"
 
     def test_total_missed_all_episodes_zero(self):
         """Agent that monitors throughout (misses everything) scores 0 total."""
@@ -410,7 +410,7 @@ class TestDeterioratingPatientEnvironment:
         env.reset(ResetRequest(task_id="deteriorating_patient", case_index=0))
         env.step(TriageAction(recommended_action="monitor"))  # T=0
         r = env.step(TriageAction(recommended_action="monitor"))  # T=30 miss
-        if r.reward == 0.0:
+        if r.reward <= TASK_SCORE_OPEN_EPS * 2:
             assert r.observation.hint is not None
             assert "T=30" in r.observation.hint or "escalat" in r.observation.hint.lower()
 
@@ -481,8 +481,8 @@ class TestConfidenceCalibration:
         result = env.step(action_with_confidence)
         bd = result.observation.score_breakdown or {}
         # Should have confidence_bonus in breakdown
-        assert "confidence_bonus" in bd or result.reward >= 1.0, (
-            f"Confidence bonus should appear in breakdown or push score to 1.0. "
+        assert "confidence_bonus" in bd or result.reward >= 1.0 - 2 * TASK_SCORE_OPEN_EPS, (
+            f"Confidence bonus should appear in breakdown or push score near 1.0. "
             f"Breakdown: {bd}, reward: {result.reward}"
         )
 
@@ -529,8 +529,8 @@ class TestAllFiveTasksIntegration:
                 for response in [TriageAction(), TriageAction(priority="low"),
                                  TriageAction(priority="critical", news2_score=10)]:
                     result = env.step(response)
-                    assert 0.0 <= result.reward <= 1.0, (
-                        f"{task_id}/case{i}: reward {result.reward} out of [0,1]"
+                    assert TASK_SCORE_OPEN_EPS <= result.reward <= 1.0 - TASK_SCORE_OPEN_EPS, (
+                        f"{task_id}/case{i}: reward {result.reward} out of (0,1)"
                     )
                     env.reset(ResetRequest(task_id=task_id, case_index=i))
 

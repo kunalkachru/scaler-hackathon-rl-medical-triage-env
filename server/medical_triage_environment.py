@@ -16,7 +16,12 @@ from server.cases import CASE_BANK, ALL_TASKS, get_cases_for_task
 from server.graders import (grade_response, grade_confidence_calibration,
                              grade_deteriorating_patient_step)
 from models import (
-    TriageAction, TriageObservation, TriageState, StepResult, ResetRequest
+    TriageAction,
+    TriageObservation,
+    TriageState,
+    StepResult,
+    ResetRequest,
+    task_score_for_api,
 )
 
 TASK_DESCRIPTIONS = {
@@ -172,20 +177,21 @@ class MedicalTriageEnvironment:
                       action.news2_score, action.recommended_action]
         if all(f is None or f == "" for f in meaningful):
             self._state.is_done = True
+            r = task_score_for_api(0.0)
             obs = TriageObservation(
                 patient_history=self._current_case.get("history", ""),
                 task_id=task_id, task_description=TASK_DESCRIPTIONS[task_id],
-                score=0.0, score_breakdown={"reason": "empty_response"},
+                score=r, score_breakdown={"reason": "empty_response"},
                 feedback="No meaningful assessment provided.", done=True,
                 step_number=self._state.step_count,
                 case_id=self._current_case["case_id"],
             )
-            return StepResult(observation=obs, reward=0.0, done=True, info={})
+            return StepResult(observation=obs, reward=r, done=True, info={})
 
         # Grade
         score, breakdown = grade_response(task_id, action_dict, self._current_case)
 
-        # Confidence calibration bonus (up to +0.10)
+        # Confidence calibration bonus (up to +0.05, see grade_confidence_calibration)
         confidence = action_dict.get("confidence")
         news2 = self._current_case.get("news2_score", 5)
         confidence_bonus = grade_confidence_calibration(confidence, news2, score >= 0.5)
@@ -193,7 +199,8 @@ class MedicalTriageEnvironment:
             score = min(1.0, score + confidence_bonus)
             breakdown["confidence_bonus"] = round(confidence_bonus, 3)
 
-        reward = round(score, 3)
+        raw_reward = round(score, 3)
+        reward = task_score_for_api(raw_reward)
         self._state.cumulative_reward += reward
         self._state.is_done = True
 
@@ -203,11 +210,11 @@ class MedicalTriageEnvironment:
             self._state.scores_per_task.get(task_id, 0.0), reward)
 
         hint = None
-        if reward < 0.4:
-            hint = self._get_hint(task_id, reward)
+        if raw_reward < 0.4:
+            hint = self._get_hint(task_id, raw_reward)
 
-        level = ("Excellent" if reward >= 0.85 else "Good" if reward >= 0.65
-                 else "Partial" if reward >= 0.40 else "Insufficient")
+        level = ("Excellent" if raw_reward >= 0.85 else "Good" if raw_reward >= 0.65
+                 else "Partial" if raw_reward >= 0.40 else "Insufficient")
         feedback = f"{level} (score={reward:.2f})"
 
         obs = TriageObservation(
@@ -232,19 +239,21 @@ class MedicalTriageEnvironment:
 
         if step_idx >= len(timeline):
             self._state.is_done = True
+            r = task_score_for_api(0.0)
             obs = TriageObservation(
                 patient_history="Episode complete.",
                 task_id="deteriorating_patient",
                 task_description=TASK_DESCRIPTIONS["deteriorating_patient"],
-                score=0.0, score_breakdown={}, feedback="Episode already complete.",
+                score=r, score_breakdown={}, feedback="Episode already complete.",
                 done=True, step_number=self._state.step_count,
                 case_id=self._current_case["case_id"],
             )
-            return StepResult(observation=obs, reward=0.0, done=True, info={})
+            return StepResult(observation=obs, reward=r, done=True, info={})
 
         current_entry = timeline[step_idx]
-        score, breakdown = grade_deteriorating_patient_step(
+        raw_step, breakdown = grade_deteriorating_patient_step(
             action_dict, current_entry, step_idx, self._current_case)
+        score = task_score_for_api(raw_step)
 
         self._state.cumulative_reward += score
 
@@ -268,12 +277,12 @@ class MedicalTriageEnvironment:
                        if not is_done and self._deterioration_step < len(timeline)
                        else current_entry["history"])
 
-        level = ("Excellent" if score >= 0.85 else "Good" if score >= 0.65
-                 else "Partial" if score >= 0.40 else "Insufficient")
+        level = ("Excellent" if raw_step >= 0.85 else "Good" if raw_step >= 0.65
+                 else "Partial" if raw_step >= 0.40 else "Insufficient")
         feedback = f"{level} at {current_entry['time']} (score={score:.2f})"
 
         hint = None
-        if score == 0.0 and step_idx == 1:
+        if raw_step == 0.0 and step_idx == 1:
             hint = ("Critical: T=30 showed clear deterioration trends — rising HR, falling BP, rising RR. "
                     "Escalate at the FIRST sign of a deterioration trend, not when it's obvious.")
 
@@ -281,12 +290,12 @@ class MedicalTriageEnvironment:
             patient_history=next_history,
             task_id="deteriorating_patient",
             task_description=TASK_DESCRIPTIONS["deteriorating_patient"],
-            score=round(score, 3), score_breakdown=breakdown, feedback=feedback,
+            score=score, score_breakdown=breakdown, feedback=feedback,
             done=is_done, step_number=self._state.step_count,
             case_id=self._current_case["case_id"], hint=hint,
         )
         return StepResult(
-            observation=obs, reward=round(score, 3), done=is_done,
+            observation=obs, reward=score, done=is_done,
             info={"step_time": current_entry["time"], "agent_action": agent_action,
                   "correct_action": current_entry.get("correct_action"),
                   "cumulative_reward": round(self._state.cumulative_reward, 3),

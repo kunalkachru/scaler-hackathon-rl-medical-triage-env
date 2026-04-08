@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from server.medical_triage_environment import MedicalTriageEnvironment
-from models import TriageAction, ResetRequest
+from models import TriageAction, ResetRequest, TASK_SCORE_OPEN_EPS
 
 
 class TestEnvironmentReset:
@@ -79,15 +79,16 @@ class TestEnvironmentStep:
             env.step(action)
 
     def test_step_returns_reward_in_range(self):
-        """step() reward must always be in [0.0, 1.0]."""
+        """step() reward must lie strictly in (0, 1) for Phase 2 validators."""
         env = MedicalTriageEnvironment()
         env.reset(ResetRequest(task_id="simple_triage", seed=0))
         for priority in ["low", "medium", "high", "critical"]:
             env.reset(ResetRequest(task_id="simple_triage", seed=0))
             action = TriageAction(priority=priority, news2_score=5, critical_sign="spo2")
             result = env.step(action)
-            assert 0.0 <= result.reward <= 1.0, \
-                f"Reward {result.reward} out of range for priority={priority}"
+            assert TASK_SCORE_OPEN_EPS <= result.reward <= 1.0 - TASK_SCORE_OPEN_EPS, (
+                f"Reward {result.reward} out of open interval for priority={priority}"
+            )
 
     def test_step_returns_done_true(self):
         """After step(), done must be True (single-step episodes)."""
@@ -128,11 +129,11 @@ class TestEnvironmentStep:
             f"Perfect ST001 response should score ≥0.85, got {result.reward}"
 
     def test_empty_action_scores_zero(self):
-        """Empty TriageAction should score 0."""
+        """Empty TriageAction maps to minimum open-interval score."""
         env = MedicalTriageEnvironment()
         env.reset(ResetRequest(task_id="simple_triage"))
         result = env.step(TriageAction())
-        assert result.reward == 0.0
+        assert result.reward == TASK_SCORE_OPEN_EPS
 
     def test_feedback_present_after_step(self):
         """Feedback string must be present in observation after step."""
@@ -221,7 +222,7 @@ class TestEpisodeFlows:
         )
         r2 = env.step(action)
         assert r2.done
-        assert 0.0 <= r2.reward <= 1.0
+        assert TASK_SCORE_OPEN_EPS <= r2.reward <= 1.0 - TASK_SCORE_OPEN_EPS
         assert r2.observation.score is not None
 
         # state

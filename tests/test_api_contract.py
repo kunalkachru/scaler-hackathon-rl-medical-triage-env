@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi.testclient import TestClient
 
 from server.app import app
+from models import TASK_SCORE_OPEN_EPS
 
 
 client = TestClient(app)
@@ -58,7 +59,7 @@ def test_step_preserves_confidence_field_for_bonus():
     payload = step_resp.json()
     breakdown = payload["observation"].get("score_breakdown") or {}
     assert payload["reward"] >= 0.9
-    assert "confidence_bonus" in breakdown or payload["reward"] == 1.0
+    assert "confidence_bonus" in breakdown or payload["reward"] >= 1.0 - 2 * TASK_SCORE_OPEN_EPS
 
 
 def test_grade_fairness_consistent_responses():
@@ -72,7 +73,7 @@ def test_grade_fairness_consistent_responses():
     resp = client.post("/grade-fairness", json={"group_id": "FP001", "responses": consistent_responses})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["score"] == 1.0
+    assert data["score"] >= 1.0 - 2 * TASK_SCORE_OPEN_EPS
     assert "breakdown" in data
 
 
