@@ -4,6 +4,7 @@
 Writes to repo-root assets/:
   - github-demo-screenshot.png
   - github-demo.webm
+  - github-demo.mp4 (if ffmpeg is on PATH — H.264 for Safari / inline README)
 
 Requires: playwright + chromium (same as browser_ui_smoke.py).
 
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -40,8 +42,9 @@ def main() -> int:
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
     shot_path = ASSETS_DIR / "github-demo-screenshot.png"
     video_path = ASSETS_DIR / "github-demo.webm"
+    mp4_path = ASSETS_DIR / "github-demo.mp4"
 
-    for p in (shot_path, video_path):
+    for p in (shot_path, video_path, mp4_path):
         if p.exists():
             p.unlink()
 
@@ -99,6 +102,33 @@ def main() -> int:
 
     print(f"Wrote {shot_path.relative_to(REPO_ROOT)}")
     print(f"Wrote {video_path.relative_to(REPO_ROOT)}")
+
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(video_path),
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-an",
+                str(mp4_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        print(f"Wrote {mp4_path.relative_to(REPO_ROOT)}")
+    except FileNotFoundError:
+        print("Optional: install ffmpeg and re-run to also write github-demo.mp4 (better Safari / GitHub viewing).")
+    except subprocess.CalledProcessError as exc:
+        print("ffmpeg failed; github-demo.mp4 not updated:", exc.stderr[-500:] if exc.stderr else exc)
+
     return 0
 
 

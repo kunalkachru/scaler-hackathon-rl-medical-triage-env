@@ -25,15 +25,23 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 
 ### Demo (UI)
 
+**Watch the demo (opens or downloads in your browser):**  
+[MP4 — recommended (Safari, Chrome, Firefox)](https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env/raw/main/assets/github-demo.mp4) · [WebM (Chrome/Firefox)](https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env/raw/main/assets/github-demo.webm)
+
+Safari does **not** play WebM inline; use the **MP4** link above. On the GitHub *blob* page for a video, use **Download raw file** or the **raw** link — the code viewer page itself often won’t play video.
+
 <p align="center">
   <img src="assets/github-demo-screenshot.png" alt="Medical Triage Environment — web UI" width="920">
 </p>
 
 <p align="center">
-  <video src="assets/github-demo.webm" controls muted playsinline width="920"></video>
+  <video controls muted playsinline width="920">
+    <source src="assets/github-demo.mp4" type="video/mp4">
+    <source src="assets/github-demo.webm" type="video/webm">
+  </video>
 </p>
 
-<p align="center"><sub>Regenerate: <code>python scripts/capture_github_demo.py</code> (requires Playwright + Chromium).</sub></p>
+<p align="center"><sub>Regenerate: <code>python scripts/capture_github_demo.py</code> (Playwright + Chromium; optional <code>ffmpeg</code> also writes <code>github-demo.mp4</code>).</sub></p>
 
 For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
