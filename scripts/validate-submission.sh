@@ -16,6 +16,18 @@
 #   ping_url   Your Hugging Face Space URL (e.g. https://your-space.hf.space)
 #   repo_dir   Path to your repo (default: current directory)
 #
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "This script requires bash."
+  echo "Run: bash ./scripts/validate-submission.sh <ping_url> [repo_dir]"
+  exit 2
+fi
+
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  echo "Do not source this script. Execute it directly:"
+  echo "  ./scripts/validate-submission.sh <ping_url> [repo_dir]"
+  return 2 2>/dev/null || exit 2
+fi
+
 set -uo pipefail
 
 DOCKER_BUILD_TIMEOUT=600
@@ -38,12 +50,13 @@ run_with_timeout() {
   else
     "$@" &
     local pid=$!
-    ( sleep "$secs" && kill "$pid" 2>/dev/null ) &
+    # Keep watcher detached from stdout/stderr; otherwise tee may wait for timeout.
+    ( sleep "$secs" && kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
     local watcher=$!
     wait "$pid" 2>/dev/null
     local rc=$?
-    kill "$watcher" 2>/dev/null
-    wait "$watcher" 2>/dev/null
+    kill "$watcher" 2>/dev/null || true
+    # Do not wait for watcher; in some shells it can block until full timeout.
     return $rc
   fi
 }
@@ -132,13 +145,18 @@ fi
 
 log "  Found Dockerfile in $DOCKER_CONTEXT"
 BUILD_OK=false
-BUILD_OUTPUT="$(run_with_timeout "$DOCKER_BUILD_TIMEOUT" docker build "$DOCKER_CONTEXT" 2>&1)" && BUILD_OK=true
+BUILD_LOG="$(portable_mktemp "validate-docker")"
+CLEANUP_FILES+=("$BUILD_LOG")
+log "  Streaming docker build output (can take several minutes on first run)..."
+if run_with_timeout "$DOCKER_BUILD_TIMEOUT" docker build "$DOCKER_CONTEXT" 2>&1 | tee "$BUILD_LOG"; then
+  BUILD_OK=true
+fi
 
 if [ "$BUILD_OK" = true ]; then
   pass "Docker build succeeded"
 else
   fail "Docker build failed (timeout=${DOCKER_BUILD_TIMEOUT}s)"
-  printf "%s\n" "$BUILD_OUTPUT" | tail -20
+  tail -20 "$BUILD_LOG" || true
   stop_at "Step 2"
 fi
 

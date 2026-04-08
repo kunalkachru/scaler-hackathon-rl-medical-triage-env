@@ -1,6 +1,12 @@
+import importlib.util
 import types
+from pathlib import Path
 
-import inference
+_INFERENCE_PATH = Path(__file__).resolve().parents[1] / "inference.py"
+_SPEC = importlib.util.spec_from_file_location("inference_module", _INFERENCE_PATH)
+assert _SPEC and _SPEC.loader
+inference = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(inference)
 
 
 def test_validate_required_env_reports_missing_fields(monkeypatch):
@@ -56,3 +62,53 @@ def test_main_uses_server_url_for_case_lookup(monkeypatch, capsys):
     assert "[END]" in output
     assert len(captured_server_urls) == 10
     assert all(url == inference.SERVER_URL for url in captured_server_urls)
+
+
+def test_run_episode_step_exception_keeps_step_and_reward_counts_aligned(monkeypatch):
+    reset_payload = {
+        "done": False,
+        "info": {"session_id": "sid-1"},
+        "observation": {"patient_history": "h", "task_description": "d"},
+    }
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    calls = {"n": 0}
+
+    def fake_post(url, json, timeout):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _Resp(reset_payload)
+        raise RuntimeError("step failed")
+
+    step_logs = []
+
+    monkeypatch.setattr(inference.req, "post", fake_post)
+    monkeypatch.setattr(inference, "call_llm", lambda *args, **kwargs: {"priority": "high"})
+    monkeypatch.setattr(
+        inference,
+        "log_step",
+        lambda step, action, reward, done, error: step_logs.append(
+            {"step": step, "reward": reward, "done": done, "error": error}
+        ),
+    )
+
+    last_reward, step_rewards, _ = inference.run_episode(
+        client=object(),
+        task_id="simple_triage",
+        case_index=0,
+        server_url="https://env.example.com",
+    )
+
+    assert len(step_logs) == 1
+    assert len(step_rewards) == 1
+    assert step_rewards[0] == 0.0
+    assert last_reward == 0.0

@@ -316,19 +316,19 @@ Task 3 (Masked Deterioration):
 ## Running Tests
 
 ```bash
-# Full suite (118 tests)
+# Full suite (119 tests)
 venv/bin/python -m pytest tests/ -v
 
 # By module
-venv/bin/python -m pytest tests/test_graders.py -v          # 30 grader unit tests
+venv/bin/python -m pytest tests/test_graders.py -v          # 31 grader unit tests
 venv/bin/python -m pytest tests/test_environment.py -v      # 24 environment integration tests
-venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 45 v2 feature tests (inc. 5 regression)
+venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 44 v2 feature tests
 venv/bin/python -m pytest tests/test_api_contract.py -v     # 9 API contract tests
 venv/bin/python -m pytest tests/test_ui_contract.py -v      # 8 UI contract tests
-venv/bin/python -m pytest tests/test_inference_contract.py -v  # 2 baseline inference contract tests
+venv/bin/python -m pytest tests/test_inference_contract.py -v  # 3 baseline inference contract tests
 ```
 
-**Current status:** 118 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status:** 119 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 
@@ -631,11 +631,12 @@ medical-triage-env/
 │   ├── requirements.txt      ← Server dependencies (fastapi, uvicorn, pydantic, openai)
 │   └── __init__.py
 ├── tests/
-│   ├── test_graders.py       ← 30 grader unit tests (NEWS2, priority distance, all tasks)
+│   ├── test_graders.py       ← 31 grader unit tests (NEWS2, priority distance, all tasks)
 │   ├── test_environment.py   ← 24 environment integration tests (reset/step/state/episode flows)
-│   ├── test_v2_enhancements.py ← 40 v2 feature tests (fairness, deterioration, confidence, asymmetric penalty)
+│   ├── test_v2_enhancements.py ← 44 v2 feature tests (fairness, deterioration, confidence, asymmetric penalty)
 │   ├── test_api_contract.py  ← 9 API contract tests (session isolation, fairness endpoint, metrics)
-│   └── test_ui_contract.py   ← 8 UI contract tests (web interface hooks + UI regression guards)
+│   ├── test_ui_contract.py   ← 8 UI contract tests (web interface hooks + UI regression guards)
+│   └── test_inference_contract.py ← 3 baseline inference contract tests
 ├── scripts/
 │   ├── pre_submit_check.sh   ← Pre-submission validation: tests → Docker build → health → reset → openenv validate
 │   ├── validate-submission.sh ← Organizer-style validator parity script: HF /reset + Docker build + openenv validate
@@ -733,4 +734,4 @@ For judges and evaluators:
 1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/medical-triage-env and click through the web UI
 2. **API smoke test** — `curl https://kunalkachru23-medical-triage-env.hf.space/health`
 3. **Full runbook** — [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md) (setup, all endpoints, UI test plan, quickstart)
-4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (118 tests, case-wise grader validation)
+4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (119 tests, case-wise grader validation)

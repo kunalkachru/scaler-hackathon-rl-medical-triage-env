@@ -260,10 +260,6 @@ import os
 import sys
 
 missing = []
-if not os.getenv("API_BASE_URL"):
-    missing.append("API_BASE_URL")
-if not os.getenv("MODEL_NAME"):
-    missing.append("MODEL_NAME")
 if not (os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY")):
     missing.append("HF_TOKEN (or OPENAI_API_KEY/API_KEY)")
 

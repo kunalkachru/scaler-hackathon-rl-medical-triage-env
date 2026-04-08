@@ -73,12 +73,12 @@ medical-triage-env/
 │   ├── requirements.txt      ← fastapi, uvicorn, pydantic, openai, requests
 │   └── __init__.py
 ├── tests/
-│   ├── test_graders.py       ← 30 grader unit tests
+│   ├── test_graders.py       ← 31 grader unit tests
 │   ├── test_environment.py   ← 24 environment integration tests
-│   ├── test_v2_enhancements.py ← 40 v2 feature tests
+│   ├── test_v2_enhancements.py ← 44 v2 feature tests
 │   ├── test_api_contract.py  ← 9 API contract tests
 │   ├── test_ui_contract.py   ← 8 UI contract tests
-│   └── test_inference_contract.py ← 2 baseline inference contract tests
+│   └── test_inference_contract.py ← 3 baseline inference contract tests
 ├── scripts/
 │   ├── pre_submit_check.sh   ← Pre-submission validation pipeline
 │   ├── validate-submission.sh ← Organizer-style validator parity script (mirrors sample naming/comments/layout)
@@ -386,32 +386,32 @@ Demonstrates the environment supports training, not just evaluation:
 
 ## 9. Testing and Validation
 
-### 9.1 Test Suite (118 tests)
+### 9.1 Test Suite (119 tests)
 
 ```bash
 # Full suite
 pytest tests/ -q
-# → 118 passed in ~0.3s
+# → 119 passed in ~0.3s
 
 # By module
-pytest tests/test_graders.py -v           # 30 tests — NEWS2, priority distance, all task graders
+pytest tests/test_graders.py -v           # 31 tests — NEWS2, priority distance, all task graders
 pytest tests/test_environment.py -v       # 24 tests — reset/step/state/episode flows
-pytest tests/test_v2_enhancements.py -v   # 45 tests — fairness, deterioration, confidence, asymmetric + 5 regression
+pytest tests/test_v2_enhancements.py -v   # 44 tests — fairness, deterioration, confidence, asymmetric + regression checks
 pytest tests/test_api_contract.py -v      # 9 tests  — session isolation, fairness endpoint, metrics
 pytest tests/test_ui_contract.py -v       # 8 tests  — web UI hooks and UI regression guards
-pytest tests/test_inference_contract.py -v # 2 tests  — baseline inference reproducibility guards
+pytest tests/test_inference_contract.py -v # 3 tests  — baseline inference reproducibility guards
 ```
 
 **Test coverage:**
 
 | Suite | Tests | What it covers |
 |---|---|---|
-| `test_graders.py` | 30 | NEWS2 boundaries, priority distance, all 3 core graders against every case |
+| `test_graders.py` | 31 | NEWS2 boundaries, priority distance, all 3 core graders against every case |
 | `test_environment.py` | 24 | reset/step/state contracts, full episode flows, multi-episode independence |
-| `test_v2_enhancements.py` | 45 | Asymmetric penalty, fairness grader, deterioration multi-turn, confidence calibration, all-5-tasks integration + regression tests for dead reward keys and news2_score correctness |
+| `test_v2_enhancements.py` | 44 | Asymmetric penalty, fairness grader, deterioration multi-turn, confidence calibration, all-5-tasks integration + regression tests for dead reward keys and news2_score correctness |
 | `test_api_contract.py` | 9 | Session isolation, grade-fairness endpoint, metrics structure, step preserves fields |
 | `test_ui_contract.py` | 8 | Web UI HTML contract, session wiring, empty-state/task-switch guards, and history demarcation checks |
-| `test_inference_contract.py` | 2 | Baseline script contract checks to prevent reproducibility regressions |
+| `test_inference_contract.py` | 3 | Baseline script contract checks to prevent reproducibility regressions |
 
 ### 9.2 Pre-Submission Validation Gate
 
@@ -420,7 +420,7 @@ pytest tests/test_inference_contract.py -v # 2 tests  — baseline inference rep
 ```
 
 Pipeline (5 steps):
-1. Full test suite (118 tests must pass)
+1. Full test suite (119 tests must pass)
 2. Docker build
 3. Container health check on port 7860
 4. Reset endpoint smoke check
@@ -640,7 +640,7 @@ openenv validate .
 **Step 2 — Run tests:**
 ```bash
 pytest tests/ -q
-# Expected: 118 passed
+# Expected: 119 passed
 ```
 
 **Step 3 — Test the live Space:**

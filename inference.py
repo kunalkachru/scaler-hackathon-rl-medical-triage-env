@@ -33,8 +33,11 @@ from openai import OpenAI
 # Mandatory env vars:
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "meta-llama/Llama-3.3-70B-Instruct")
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY", "")
+HF_TOKEN = os.getenv("HF_TOKEN")
+API_KEY = HF_TOKEN or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY", "")
 SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8000")
+# Optional when using from_docker_image() based workflows.
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 
 TASK_NAME = os.getenv("TASK_NAME", "medical_triage")
 BENCHMARK = os.getenv("BENCHMARK", "openenv_medical_triage")
@@ -194,6 +197,8 @@ def run_episode(client: OpenAI, task_id: str, case_index: int, server_url: str) 
             step_error = str(exc)
             reward = 0.0
             done = True
+            step_rewards.append(reward)
+            last_reward = reward
             step_count += 1
             action_str = json.dumps(action_dict, separators=(",", ":"), ensure_ascii=True)
             log_step(step=step_count, action=action_str, reward=reward, done=done, error=step_error)

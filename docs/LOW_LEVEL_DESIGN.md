@@ -274,13 +274,13 @@ Functional content:
 ### 4.12 Validation and test harness files
 
 `scripts/pre_submit_check.sh`:
-- runs full pytest (118 tests)
+- runs full pytest (119 tests)
 - builds Docker image
 - checks container health
 - smoke-tests `/reset`
 - runs `openenv validate`
 
-`tests/test_graders.py` (30 tests):
+`tests/test_graders.py` (31 tests):
 - unit-level grading correctness and NEWS2 boundary tests.
 - covers all scoring boundary values per NHS RCP 2017 spec.
 
@@ -288,7 +288,7 @@ Functional content:
 - integration-level environment lifecycle and state tests.
 - reset, step, state, full episode flows.
 
-`tests/test_v2_enhancements.py` (40 tests):
+`tests/test_v2_enhancements.py` (44 tests):
 - fairness parity, asymmetric priority distance, confidence calibration bonus, and multi-turn deterioration tests.
 - includes 16 adversarial robustness tests (null fields, wrong types, empty body, unknown fields).
 
@@ -300,10 +300,10 @@ Functional content:
 - UI DOM contract, session wiring, and UI regression guards for interactive hooks.
 - requires live server on localhost:8000.
 
-`tests/test_inference_contract.py` (2 tests):
+`tests/test_inference_contract.py` (3 tests):
 - baseline inference reproducibility guards (symbol wiring + required env checks).
 
-**Total: 118 tests — all passing.**
+**Total: 119 tests — all passing.**
 
 ## 5) Cross-File Dependency Map
 

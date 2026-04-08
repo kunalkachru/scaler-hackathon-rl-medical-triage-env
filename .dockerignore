@@ -1,0 +1,34 @@
+# Python environment — never needed inside the container
+venv/
+.venv/
+**/venv/**
+**/.venv/**
+__pycache__/
+**/__pycache__/**
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Dev/test files — not COPYd by Dockerfile
+tests/
+docs/
+scripts/
+outputs/
+uv.lock
+pyproject.toml
+setupCredentials.py
+train.py
+BUILD_ID
+
+# Secrets and local config
+.env
+.env.*
+
+# HF/git metadata
+.gitignore
+.hfignore
+.git/
+
+# macOS
+.DS_Store
