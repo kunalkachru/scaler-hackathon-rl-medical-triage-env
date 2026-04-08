@@ -75,8 +75,8 @@ python - <<'PY' "$tmpdir/step.json"
 import json, sys
 d=json.load(open(sys.argv[1]))
 r=d.get("reward",-1)
-# Phase 2: scores must lie strictly in (0, 1), not 0.0 or 1.0
-assert 1e-4 < r < 1.0 - 1e-4, f"Reward out of open interval (0,1): {r}"
+# Phase 2: strictly in (0, 1) — not 0.0 or 1.0. API may return exactly 1.0 - eps at ceiling.
+assert 0.0 < r < 1.0, f"Reward out of open interval (0,1): {r}"
 print("  ok: reward=", r, "done=", d.get("done"))
 PY
 
