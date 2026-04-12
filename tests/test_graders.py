@@ -642,7 +642,7 @@ class TestNewSimpleTriageCases:
 
     def test_st005_anaphylaxis_perfect(self):
         """ST005 — Anaphylaxis: critical, systolic_bp, emergency_response."""
-        from server.cases import SIMPLE_TRIAGE_CASES
+
         case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST005")
         response = {
             "priority": "critical",
@@ -657,7 +657,7 @@ class TestNewSimpleTriageCases:
 
     def test_st005_anaphylaxis_synonym_bp(self):
         """ST005 — Synonym 'hypotension' for systolic_bp gets full critical_sign credit."""
-        from server.cases import SIMPLE_TRIAGE_CASES
+
         case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST005")
         response = {
             "priority": "critical",
@@ -671,7 +671,7 @@ class TestNewSimpleTriageCases:
 
     def test_st006_copd_perfect(self):
         """ST006 — COPD exacerbation: high, respiratory_rate, urgent_review."""
-        from server.cases import SIMPLE_TRIAGE_CASES
+
         case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST006")
         response = {
             "priority": "high",
@@ -686,7 +686,7 @@ class TestNewSimpleTriageCases:
 
     def test_st007_stroke_perfect(self):
         """ST007 — Stroke: high, consciousness, emergency_response."""
-        from server.cases import SIMPLE_TRIAGE_CASES
+
         case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST007")
         response = {
             "priority": "high",
@@ -701,7 +701,7 @@ class TestNewSimpleTriageCases:
 
     def test_st007_stroke_synonym_consciousness(self):
         """ST007 — Synonym 'confusion' for consciousness gets full critical_sign credit."""
-        from server.cases import SIMPLE_TRIAGE_CASES
+
         case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST007")
         response = {
             "priority": "high",
@@ -715,7 +715,7 @@ class TestNewSimpleTriageCases:
 
     def test_st008_aki_perfect(self):
         """ST008 — AKI: medium, consciousness, urgent_review."""
-        from server.cases import SIMPLE_TRIAGE_CASES
+
         case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST008")
         response = {
             "priority": "medium",
@@ -728,8 +728,6 @@ class TestNewSimpleTriageCases:
 
     def test_new_cases_news2_match_computed(self):
         """All new ST cases: stored news2_score must match compute_news2()."""
-        from server.cases import SIMPLE_TRIAGE_CASES
-        from server.graders import compute_news2
         new_cases = [c for c in SIMPLE_TRIAGE_CASES if c["case_id"] in ("ST005", "ST006", "ST007", "ST008")]
         for case in new_cases:
             computed, _ = compute_news2(case["vitals"])

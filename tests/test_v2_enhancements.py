@@ -29,7 +29,8 @@ from server.graders import (
 )
 from server.cases import (
     DEMOGRAPHIC_FAIRNESS_CASES, DETERIORATION_CASES,
-    FAIRNESS_CASES_FP001, FAIRNESS_CASES_FP002, FAIRNESS_CASES_FP003
+    FAIRNESS_CASES_FP001, FAIRNESS_CASES_FP002, FAIRNESS_CASES_FP003,
+    CONFLICTING_VITALS_CASES, CASE_BANK,
 )
 from server.medical_triage_environment import MedicalTriageEnvironment
 from models import TriageAction, ResetRequest, TASK_SCORE_OPEN_EPS
@@ -340,7 +341,6 @@ class TestDeterioratingPatientGrader:
         Regression test for CV002 (was 3, should be 4) and CV003 (was 8, should be 7).
         """
         from server.graders import compute_news2
-        from server.cases import CONFLICTING_VITALS_CASES
         for case in CONFLICTING_VITALS_CASES:
             computed, _ = compute_news2(case["vitals"])
             assert computed == case["news2_score"], (
@@ -512,7 +512,7 @@ class TestAllFiveTasksIntegration:
         assert len(r.observation.available_tasks) == 8
 
     def test_case_counts(self):
-        from server.cases import CASE_BANK
+
         assert len(CASE_BANK["simple_triage"]) == 10
         assert len(CASE_BANK["conflicting_vitals"]) == 8
         assert len(CASE_BANK["masked_deterioration"]) == 10
@@ -525,7 +525,7 @@ class TestAllFiveTasksIntegration:
     def test_score_always_in_range_all_tasks(self):
         """Critical invariant: all graders must return [0.0, 1.0]."""
         env = MedicalTriageEnvironment()
-        from server.cases import CASE_BANK
+
         for task_id in ["simple_triage", "conflicting_vitals", "masked_deterioration",
                         "demographic_fairness"]:
             cases = CASE_BANK[task_id]

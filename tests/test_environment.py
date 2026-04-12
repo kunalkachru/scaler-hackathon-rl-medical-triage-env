@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from server.medical_triage_environment import MedicalTriageEnvironment
+from server.cases import ALL_TASKS
 from models import TriageAction, ResetRequest, TASK_SCORE_OPEN_EPS
 
 
@@ -28,7 +29,6 @@ class TestEnvironmentReset:
         """reset() observation must include a valid task_id."""
         env = MedicalTriageEnvironment()
         result = env.reset()
-        from server.cases import ALL_TASKS
         assert result.observation.task_id in ALL_TASKS, \
             f"task_id '{result.observation.task_id}' not in {ALL_TASKS}"
 

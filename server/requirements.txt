@@ -1,5 +1,4 @@
 # v2.0.1 — grader fixes, 116 tests
-openenv>=0.2.0; python_version < "0"
 fastapi==0.115.0
 uvicorn==0.30.6
 pydantic==2.8.2
