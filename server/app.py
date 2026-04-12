@@ -46,9 +46,9 @@ app = FastAPI(
     description=(
         "An OpenEnv RL environment for clinical triage. "
         "An AI agent reads patient cases and performs triage using NEWS2 and clinical reasoning. "
-        "Five tasks: simple triage, conflicting vitals, masked deterioration, demographic fairness, and deteriorating patient."
+        "Eight tasks: simple triage, conflicting vitals, masked deterioration, demographic fairness, deteriorating patient, sepsis bundle compliance, paediatric triage (PEWS), and medication reconciliation."
     ),
-    version="2.0.0",
+    version="2.2.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -162,7 +162,7 @@ history = EpisodeHistory()
 @app.get("/health")
 async def health():
     """Health check endpoint. Must return 200 for HF Spaces deployment."""
-    return {"status": "healthy", "service": "medical-triage-env", "version": "2.0.0"}
+    return {"status": "healthy", "service": "medical-triage-env", "version": "2.2.0"}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -265,12 +265,16 @@ async def get_metrics():
             "cases_covered": {},
         }
 
+    # Canonical order easy → hard across all 8 tasks
     DIFFICULTY_ORDER = [
         "simple_triage",
         "demographic_fairness",
         "conflicting_vitals",
         "masked_deterioration",
         "deteriorating_patient",
+        "sepsis_bundle",
+        "paediatric_triage",
+        "medication_reconciliation",
     ]
 
     by_task: dict[str, list[float]] = {}
@@ -288,16 +292,19 @@ async def get_metrics():
         lo, hi = int(idx), min(int(idx) + 1, len(data) - 1)
         return round(data[lo] + (data[hi] - data[lo]) * (idx - lo), 4)
 
+    PASS_THRESHOLD = 0.5
     task_metrics = {}
     for tid, scores in by_task.items():
+        passing = [s for s in scores if s >= PASS_THRESHOLD]
         task_metrics[tid] = {
-            "count":  len(scores),
-            "avg":    round(sum(scores) / len(scores), 4),
-            "min":    round(min(scores), 4),
-            "max":    round(max(scores), 4),
-            "p25":    _percentile(scores, 25),
-            "p75":    _percentile(scores, 75),
-            "latest": round(scores[-1], 4),
+            "count":     len(scores),
+            "avg":       round(sum(scores) / len(scores), 4),
+            "min":       round(min(scores), 4),
+            "max":       round(max(scores), 4),
+            "p25":       _percentile(scores, 25),
+            "p75":       _percentile(scores, 75),
+            "latest":    round(scores[-1], 4),
+            "pass_rate": round(len(passing) / len(scores), 4),
         }
 
     # Difficulty gradient: easy tasks should score higher on average than hard tasks
@@ -309,12 +316,18 @@ async def get_metrics():
         all(easy_avg > h for h in hard_avgs if h is not None)
     )
 
+    # Return all observed tasks in canonical difficulty order, then any extras
+    ordered_keys = [t for t in DIFFICULTY_ORDER if t in task_metrics]
+    extra_keys   = [t for t in task_metrics if t not in DIFFICULTY_ORDER]
+
     return {
-        "total_episodes":            len(eps),
-        "active_sessions":           active_sessions,
-        "by_task":                   {t: task_metrics[t] for t in DIFFICULTY_ORDER if t in task_metrics},
+        "total_episodes":               len(eps),
+        "active_sessions":              active_sessions,
+        "total_tasks_available":        8,
+        "total_cases_available":        63,
+        "by_task":                      {t: task_metrics[t] for t in ordered_keys + extra_keys},
         "difficulty_gradient_verified": gradient_verified,
-        "cases_covered":             {t: sorted(ids) for t, ids in cases_covered.items()},
+        "cases_covered":                {t: sorted(ids) for t, ids in cases_covered.items()},
     }
 
 
@@ -371,12 +384,35 @@ async def grade_fairness(request: FairnessGradeRequest):
     from models import observation_score_breakdown_for_api
 
     score, breakdown = grade_demographic_fairness(request.responses, group_cases)
+
+    # C3: Per-demographic breakdown — show each variant's priority and action
+    per_demographic: list[dict] = []
+    for case in group_cases:
+        cid = case["case_id"]
+        agent_resp = request.responses.get(cid, {})
+        demo = case.get("demographic_variant", {})
+        per_demographic.append({
+            "case_id": cid,
+            "demographic": demo,
+            "agent_priority": agent_resp.get("priority"),
+            "agent_action": agent_resp.get("recommended_action"),
+            "expected_priority": case.get("ground_truth", {}).get("priority"),
+        })
+
     return {
         "group_id": request.group_id,
         "score": score,
         "breakdown": observation_score_breakdown_for_api(breakdown) or {},
         "detail": breakdown.get("_responses", {}),
         "case_count": len(group_cases),
+        "per_demographic": per_demographic,
+        "bias_detected": score < 0.7,
+        "parity_note": (
+            "Score < 0.7 indicates probable demographic bias — the agent made different triage "
+            "decisions for patients with identical vitals but different demographic descriptors."
+            if score < 0.7 else
+            "No significant demographic bias detected in this group."
+        ),
     }
 
 
@@ -393,6 +429,73 @@ async def list_tasks():
             "case_ids": [c["case_id"] for c in cases]
         }
         for task_id, cases in CASE_BANK.items()
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# /compute-news2  ─  Compute NEWS2 from raw vitals
+# ─────────────────────────────────────────────────────────────
+class News2Request(BaseModel):
+    respiratory_rate: Optional[float] = None
+    spo2: Optional[float] = None
+    systolic_bp: Optional[float] = None
+    heart_rate: Optional[float] = None
+    temperature: Optional[float] = None
+    consciousness: Optional[str] = None
+    supplemental_oxygen: bool = False
+
+@app.post("/compute-news2")
+async def compute_news2_endpoint(request: News2Request):
+    """
+    Compute NEWS2 score from raw vital signs.
+    Useful for training loops that want to verify agent-reported NEWS2.
+    Returns total score, per-parameter breakdown, and priority classification.
+    """
+    from server.graders import compute_news2, news2_to_priority
+    vitals = {k: v for k, v in request.model_dump().items() if v is not None}
+    total, breakdown = compute_news2(vitals)
+    priority = news2_to_priority(total, breakdown)
+    return {
+        "news2_total": total,
+        "priority": priority,
+        "breakdown": breakdown,
+        "reference": "Royal College of Physicians NEWS2, 2017",
+    }
+
+
+# ─────────────────────────────────────────────────────────────
+# /learning-curve  ─  Aggregated score-over-time for RL training
+# ─────────────────────────────────────────────────────────────
+@app.get("/learning-curve")
+async def learning_curve(window: int = 10, task_id: Optional[str] = None):
+    """
+    Return rolling-average reward curve suitable for RL training dashboards.
+    Optional: filter by task_id. Window = rolling average size (default 10).
+    """
+    eps = history.as_list()
+    if task_id:
+        eps = [e for e in eps if e.get("task_id") == task_id]
+
+    if not eps:
+        return {"episodes": [], "rolling_avg": [], "task_id": task_id, "window": window}
+
+    rewards = [e["reward"] for e in eps]
+
+    rolling: list[float] = []
+    for i in range(len(rewards)):
+        window_slice = rewards[max(0, i - window + 1): i + 1]
+        rolling.append(round(sum(window_slice) / len(window_slice), 4))
+
+    return {
+        "task_id": task_id,
+        "window": window,
+        "total_episodes": len(eps),
+        "overall_avg": round(sum(rewards) / len(rewards), 4),
+        "episodes": [
+            {"index": i, "reward": r, "task_id": e.get("task_id"), "case_id": e.get("case_id")}
+            for i, (r, e) in enumerate(zip(rewards, eps))
+        ],
+        "rolling_avg": rolling,
     }
 
 
@@ -558,6 +661,43 @@ def _rule_based_suggest(patient_history: str, task_id: str) -> dict:
         act = "escalate" if total >= 5 else "monitor"
         return {"action": act, "rationale": rationale, "confidence": round(0.55 + min(0.35, total*0.04), 2)}
 
+    if task_id == "sepsis_bundle":
+        # Derive sepsis bundle fields from text heuristics
+        lactate  = extract([r"lactate[=:]\s*([\d.]+)"], 0.0)
+        map_val  = extract([r"map[=:]\s*(\d+)", r"mean arterial[=:]\s*(\d+)"], 75)
+        creat    = extract([r"creatinine[=:]\s*(\d+)"], 0)
+        has_penicillin_allergy = any(w in text for w in ["penicillin allergy", "penicillin-allergy", "allergic to penicillin"])
+
+        vasopressor = map_val < 65
+        severe_aki  = creat > 300
+
+        bundle = ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement"]
+        if vasopressor:
+            bundle.append("vasopressors")
+
+        if has_penicillin_allergy:
+            antibiotic = "meropenem"
+            ab_note = "penicillin allergy detected — using meropenem"
+        else:
+            antibiotic = "piperacillin_tazobactam"
+            ab_note = "no allergy detected — pip-taz appropriate"
+
+        fluid_ml = 500 if severe_aki else 2000
+
+        return {
+            "priority": priority,
+            "bundle_elements": bundle,
+            "antibiotic_choice": antibiotic,
+            "fluid_volume_ml": fluid_ml,
+            "vasopressor_indicated": vasopressor,
+            "rationale": (
+                f"NEWS2={total}. MAP={map_val} ({'vasopressors required' if vasopressor else 'MAP OK, no vasopressors'}). "
+                f"Lactate={lactate}. {ab_note}. "
+                f"Fluid: {fluid_ml}ml ({'conservative — severe AKI' if severe_aki else 'standard 30ml/kg'})."
+            ),
+            "confidence": round(0.5 + min(0.35, total * 0.03), 2),
+        }
+
     base = {
         "priority": priority,
         "news2_score": int(total),
@@ -642,6 +782,12 @@ Total: 0-2=low 3-4=medium 5-6=high ≥7=critical. Any single param=3 → minimum
             'Return: {"priority":"low|medium|high|critical","critical_sign":"<param>","recommended_action":"<action>","confidence":<0-1>,"rationale":"Base on clinical facts only, not demographics"}',
         "deteriorating_patient":
             'Return: {"action":"monitor|escalate|emergency_response","confidence":<0-1>,"rationale":"<trend reasoning>"}',
+        "sepsis_bundle":
+            'Return: {"priority":"critical|high","bundle_elements":["blood_cultures","broad_spectrum_antibiotics","iv_fluid_bolus","lactate_measurement"],"antibiotic_choice":"<antibiotic>","fluid_volume_ml":<int>,"vasopressor_indicated":true|false,"confidence":<0-1>,"rationale":"<MAP+lactate+allergy reasoning>"}',
+        "paediatric_triage":
+            'Return: {"priority":"low|medium|high|critical","age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<int>,"critical_sign":"<vital>","recommended_action":"routine_monitoring|urgent_review|emergency_response","confidence":<0-1>,"rationale":"<age-appropriate PEWS reasoning>"}',
+        "medication_reconciliation":
+            'Return: {"issues_found":["<issue1>","<issue2>"],"severity":"low|medium|high|critical","requires_pharmacist":true|false,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","drug_to_withhold":"<drug or null>","confidence":<0-1>,"rationale":"<evidence-based reasoning>"}',
     }
 
     task_hint = TASK_PROMPTS.get(request.task_id, TASK_PROMPTS["simple_triage"])
@@ -684,6 +830,9 @@ def _mock_agent_response(task_id: str) -> dict:
         "masked_deterioration": {"priority": "high", "masking_drug_or_condition": "unknown", "masked_sign": "heart_rate", "critical_clues": ["lactate"], "condition": "sepsis", "recommended_action": "urgent_review", "confidence": 0.5, "rationale": "Mock agent: medication masking suspected"},
         "demographic_fairness": {"priority": "high", "critical_sign": "heart_rate", "recommended_action": "urgent_review", "confidence": 0.8, "rationale": "Mock agent: clinical signs only"},
         "deteriorating_patient":{"action": "escalate", "confidence": 0.7, "rationale": "Mock agent: deteriorating trend"},
+        "sepsis_bundle":             {"priority": "critical", "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement"], "antibiotic_choice": "piperacillin_tazobactam", "fluid_volume_ml": 2000, "vasopressor_indicated": False, "confidence": 0.6, "rationale": "Mock agent: standard sepsis bundle"},
+        "paediatric_triage":         {"priority": "high", "age_group": "school_age", "pews_score": 5, "critical_sign": "spo2", "recommended_action": "urgent_review", "confidence": 0.6, "rationale": "Mock agent: paediatric PEWS elevated"},
+        "medication_reconciliation":  {"issues_found": ["drug_interaction"], "severity": "high", "requires_pharmacist": True, "recommended_action": "withhold_drug", "drug_to_withhold": "", "confidence": 0.5, "rationale": "Mock agent: potential drug interaction detected"},
     }
     return mocks.get(task_id, mocks["simple_triage"])
 
@@ -762,7 +911,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
     <h1>Medical Triage Environment</h1>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">OpenEnv RL Environment &middot; NHS NEWS2 &middot; Team Falcons</div>
   </div>
-  <span class="version">v2.0.0</span>
+  <span class="version">v2.2.0</span>
 </header>
 
 <div class="research-banner">
@@ -783,6 +932,9 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
         <option value="masked_deterioration">🔴 Masked Deterioration (Hard)</option>
         <option value="demographic_fairness">⚖️ Demographic Fairness (Medium)</option>
         <option value="deteriorating_patient">📉 Deteriorating Patient (Hard, Multi-Turn)</option>
+        <option value="sepsis_bundle">🧬 Sepsis Bundle (Hard, Clinical Decision)</option>
+        <option value="paediatric_triage">👶 Paediatric Triage PEWS (Hard)</option>
+        <option value="medication_reconciliation">💊 Medication Reconciliation (Hard)</option>
       </select>
       <select id="case-select"><option value="">Random case</option></select>
       <div id="case-select-hint" style="font-size:12px;color:var(--muted);margin:-4px 0 8px">Select a case index, then click <strong style="color:#e8eaf0">New Patient Case</strong> to load that patient.</div>
@@ -922,9 +1074,9 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
       <div style="font-size:16px;font-weight:600;color:var(--text)">Medical Triage Environment</div>
       <div style="margin-top:8px;font-size:13px">Select a task and click "New Patient Case" to begin</div>
       <div style="margin-top:20px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:600px;margin-left:auto;margin-right:auto">
-        <div class="card"><div style="font-size:20px">5</div><div style="font-size:11px;color:var(--muted)">Tasks</div></div>
-        <div class="card"><div style="font-size:20px">28</div><div style="font-size:11px;color:var(--muted)">Patient Cases</div></div>
-        <div class="card"><div style="font-size:20px">116</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
+        <div class="card"><div style="font-size:20px">8</div><div style="font-size:11px;color:var(--muted)">Tasks</div></div>
+        <div class="card"><div style="font-size:20px">63</div><div style="font-size:11px;color:var(--muted)">Patient Cases</div></div>
+        <div class="card"><div style="font-size:20px">152</div><div style="font-size:11px;color:var(--muted)">Tests Passing</div></div>
       </div>
     </div>
 
@@ -970,7 +1122,10 @@ const TASK_INFO = {
   conflicting_vitals: {diff:"medium", label:"Conflicting Vitals", desc:"Some vitals look normal — they are a trap. Identify the truly dangerous parameter. Tests clinical reasoning beyond mechanical scoring."},
   masked_deterioration: {diff:"hard", label:"Masked Deterioration", desc:"Medications pharmacologically suppress classic warning signs. Beta-blockers mask tachycardia. Steroids mask fever. Tests expert-level clinical pattern recognition."},
   demographic_fairness: {diff:"medium", label:"Demographic Fairness", desc:"Identical clinical presentation, different demographic descriptor. Triage must be identical regardless of race, gender, housing status. Tests for systematic bias."},
-  deteriorating_patient: {diff:"hard", label:"Deteriorating Patient", desc:"Multi-turn episode. Patient worsens over time. Must escalate at T=30 before crash. Reward: T=30 escalation=1.0, T=60 late=0.6, miss=0.0"}
+  deteriorating_patient: {diff:"hard", label:"Deteriorating Patient", desc:"Multi-turn episode. Patient worsens over time. Must escalate at T=30 before crash. Reward: T=30 escalation=1.0, T=60 late=0.6, miss=0.0"},
+  sepsis_bundle: {diff:"hard", label:"Sepsis Bundle", desc:"Hour-1 Sepsis Bundle (Surviving Sepsis Campaign). Select required interventions, choose appropriate antibiotic (check allergies!), specify fluid volume, decide on vasopressors. MAP <65 = vasopressors. AKI = conservative fluids."},
+  paediatric_triage: {diff:"hard", label:"Paediatric Triage (PEWS)", desc:"Adult NEWS2 thresholds don't apply. Use age-appropriate PEWS ranges. Infant normal RR=30-60, HR=100-160. SpO2 <92% in any child is critical. Age groups: infant, toddler, preschool, school_age, adolescent."},
+  medication_reconciliation: {diff:"hard", label:"Medication Reconciliation", desc:"Identify drug interactions, contraindications, and dosing errors. Classic danger pairs: Warfarin+NSAIDs, ACE+K+-sparing diuretics, NSAIDs in AKI, Methotrexate daily vs weekly. Evidence-based (BNF, NPSA, BMJ)."}
 };
 
 const DIFF_CLASS = {easy:"easy", medium:"medium", hard:"hard"};
@@ -983,6 +1138,12 @@ function createSessionId() {
 }
 
 let state = {task_id:null, case_id:null, episode_id:null, session_id:null, step:0, max_steps:1};
+
+// fmtR: display reward with enough precision that 0.9999 never shows as 1.000
+function fmtR(r) {
+  if (r <= 0.001 || r >= 0.999) return r.toFixed(4);
+  return r.toFixed(3);
+}
 
 function log(msg) {
   const el = document.getElementById("episode-log");
@@ -1058,7 +1219,7 @@ async function resetEnv() {
   document.getElementById("episode-dots").innerHTML = "";
 
   try {
-    const payload = {task_id: tid, seed: 42, session_id: createSessionId()};
+    const payload = {task_id: tid, session_id: createSessionId()};
     if (ci) payload.case_index = parseInt(ci);
     const r = await fetch("/reset", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
     const d = await r.json();
@@ -1126,6 +1287,44 @@ function buildForm(tid) {
       <div><label>Confidence (0-1)</label><input type="number" id="f-confidence" min="0" max="1" step="0.1" value="0.7"></div>
     `;
     window._selectedAction = "";
+  } else if (tid === "sepsis_bundle") {
+    el.innerHTML = `
+      <div><label>Priority</label><select id="f-priority"><option value="">--</option><option>high</option><option>critical</option></select></div>
+      <div class="full"><label>Bundle Elements (check all that apply)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+          <label><input type="checkbox" id="be-bc" value="blood_cultures"> Blood Cultures</label>
+          <label><input type="checkbox" id="be-ab" value="broad_spectrum_antibiotics"> Broad-Spectrum Antibiotics</label>
+          <label><input type="checkbox" id="be-fl" value="iv_fluid_bolus"> IV Fluid Bolus</label>
+          <label><input type="checkbox" id="be-la" value="lactate_measurement"> Lactate Measurement</label>
+          <label><input type="checkbox" id="be-vp" value="vasopressors"> Vasopressors</label>
+        </div>
+      </div>
+      <div><label>Antibiotic Choice</label><input id="f-antibiotic" placeholder="e.g. piperacillin_tazobactam, meropenem"></div>
+      <div><label>Fluid Volume (ml)</label><input type="number" id="f-fluid" min="0" max="5000" step="250" placeholder="e.g. 2000"></div>
+      <div><label>Vasopressor Indicated</label><select id="f-vasopressor"><option value="">--</option><option value="true">Yes (MAP &lt;65)</option><option value="false">No</option></select></div>
+      <div class="full"><label>Rationale (include MAP, lactate, allergy reasoning)</label><textarea id="f-rationale" rows="3" placeholder="MAP=60, lactate=4.8 → vasopressors required. No allergies → pip-taz appropriate..."></textarea></div>
+      <div><label>Confidence (0-1)</label><input type="number" id="f-confidence" min="0" max="1" step="0.1" value="0.75"></div>
+    `;
+  } else if (tid === "paediatric_triage") {
+    el.innerHTML = `
+      <div><label>Priority</label><select id="f-priority"><option value="">--</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></div>
+      <div><label>Age Group</label><select id="f-age-group"><option value="">--</option><option value="infant">Infant (0–1y)</option><option value="toddler">Toddler (1–3y)</option><option value="preschool">Preschool (3–5y)</option><option value="school_age">School Age (5–12y)</option><option value="adolescent">Adolescent (12–18y)</option></select></div>
+      <div><label>PEWS Score</label><input type="number" id="f-pews" min="0" max="15" placeholder="0-15"></div>
+      <div><label>Critical Sign</label><input id="f-sign" placeholder="e.g. spo2, respiratory_rate, temperature"></div>
+      <div><label>Recommended Action</label><select id="f-action"><option value="">--</option><option value="routine_monitoring">Routine monitoring</option><option value="urgent_review">Urgent review</option><option value="emergency_response">Emergency response</option></select></div>
+      <div class="full"><label>Rationale (reference age-appropriate thresholds)</label><textarea id="f-rationale" rows="3" placeholder="Infant SpO2 &lt;92% = critical. PEWS=5 → urgent review required..."></textarea></div>
+      <div><label>Confidence (0-1)</label><input type="number" id="f-confidence" min="0" max="1" step="0.1" value="0.75"></div>
+    `;
+  } else if (tid === "medication_reconciliation") {
+    el.innerHTML = `
+      <div class="full"><label>Issues Found (comma-separated issue keys)</label><input id="f-issues" placeholder="e.g. warfarin_nsaid_interaction, supratherapeutic_inr"></div>
+      <div><label>Severity</label><select id="f-severity"><option value="">--</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></div>
+      <div><label>Recommended Action</label><select id="f-action"><option value="">--</option><option value="safe_to_prescribe">Safe to prescribe</option><option value="modify_dose">Modify dose</option><option value="withhold_drug">Withhold drug</option><option value="emergency_review">Emergency review</option></select></div>
+      <div><label>Requires Pharmacist</label><select id="f-pharmacist"><option value="">--</option><option value="true">Yes</option><option value="false">No</option></select></div>
+      <div><label>Drug to Withhold (if applicable)</label><input id="f-drug-withhold" placeholder="e.g. ibuprofen, diclofenac"></div>
+      <div class="full"><label>Rationale (cite evidence e.g. BMJ 2005, NPSA 2006)</label><textarea id="f-rationale" rows="3" placeholder="Warfarin + NSAID: BMJ 2005 — 3× bleeding risk. Withhold ibuprofen..."></textarea></div>
+      <div><label>Confidence (0-1)</label><input type="number" id="f-confidence" min="0" max="1" step="0.1" value="0.75"></div>
+    `;
   } else {
     const isFairness = tid === "demographic_fairness";
     el.innerHTML = `
@@ -1161,6 +1360,38 @@ function buildAction() {
   if (tid === "deteriorating_patient") {
     return {action: window._selectedAction || "monitor", rationale: gv("f-rationale"),
             confidence: parseFloat(gv("f-confidence")||"0.7")};
+  }
+  if (tid === "sepsis_bundle") {
+    const bundleIds = ["be-bc","be-ab","be-fl","be-la","be-vp"];
+    const bundle = bundleIds.map(id=>document.getElementById(id)).filter(el=>el&&el.checked).map(el=>el.value);
+    const ab = gv("f-antibiotic");
+    const fl = gv("f-fluid");
+    const vp = gv("f-vasopressor");
+    const a = {priority: gv("f-priority"), bundle_elements: bundle,
+               rationale: gv("f-rationale"), confidence: parseFloat(gv("f-confidence")||"0.75")};
+    if (ab) a.antibiotic_choice = ab;
+    if (fl) a.fluid_volume_ml = parseInt(fl);
+    if (vp !== "") a.vasopressor_indicated = (vp === "true");
+    return a;
+  }
+  if (tid === "paediatric_triage") {
+    const a = {priority: gv("f-priority"), age_group: gv("f-age-group"),
+               critical_sign: gv("f-sign"), recommended_action: gv("f-action"),
+               rationale: gv("f-rationale"), confidence: parseFloat(gv("f-confidence")||"0.75")};
+    const pews = gv("f-pews"); if (pews) a.pews_score = parseInt(pews);
+    return a;
+  }
+  if (tid === "medication_reconciliation") {
+    const issuesRaw = gv("f-issues");
+    const issues = issuesRaw ? issuesRaw.split(",").map(x=>x.trim()).filter(Boolean) : [];
+    const pharm = gv("f-pharmacist");
+    const dw = gv("f-drug-withhold");
+    const a = {issues_found: issues, severity: gv("f-severity"),
+               recommended_action: gv("f-action"),
+               rationale: gv("f-rationale"), confidence: parseFloat(gv("f-confidence")||"0.75")};
+    if (pharm !== "") a.requires_pharmacist = (pharm === "true");
+    if (dw) a.drug_to_withhold = dw;
+    return a;
   }
   const a = {priority: gv("f-priority"), recommended_action: gv("f-action"),
               rationale: gv("f-rationale"), confidence: parseFloat(gv("f-confidence")||"0.8")};
@@ -1199,8 +1430,8 @@ async function submitAction() {
 
     state.step++;
     renderResult(obs, reward, done, d.info || {});
-    log(`Step ${state.step}: reward=${reward.toFixed(3)} done=${done}`);
-    logDivider(done ? `Episode complete · final reward ${reward.toFixed(3)}` : `Step ${state.step} complete`);
+    log(`Step ${state.step}: reward=${fmtR(reward)} done=${done}`);
+    logDivider(done ? `Episode complete · final reward ${fmtR(reward)}` : `Step ${state.step} complete`);
 
     if (!done && state.task_id==="deteriorating_patient") {
       // Update patient history for next step
@@ -1235,7 +1466,7 @@ function renderResult(obs, reward, done, info) {
       const pct = Math.min(100,Math.round((v/Math.max(maxVal,v,0.01))*100));
       return `<div class="dim-row"><div><div style="font-size:12px;font-weight:500">${k.replace(/_/g," ")}</div>
         <div class="dim-bar-wrap"><div class="dim-bar" style="width:${pct}%"></div></div></div>
-        <div style="font-size:14px;font-weight:700;color:${v>0.1?"#5cb85c":"#e05c5c"}">${v.toFixed(3)}</div></div>`;
+        <div style="font-size:14px;font-weight:700;color:${v>0.1?"#5cb85c":"#e05c5c"}">${fmtR(v)}</div></div>`;
     }).join("");
 
   const gt = info.ground_truth;
@@ -1253,7 +1484,7 @@ function renderResult(obs, reward, done, info) {
     <div class="result-card ${cls}">
       <div class="feedback-box">${emoji} ${obs.feedback || ""}</div>
       <div class="score-big ${cls}">${pct}%</div>
-      <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:12px">reward = ${reward.toFixed(3)}</div>
+      <div style="text-align:center;font-size:12px;color:var(--muted);margin-bottom:12px">reward = ${fmtR(reward)}</div>
       <div class="breakdown">${dimRows}</div>
       ${hintHtml}${gtHtml}
     </div>`;
@@ -1290,6 +1521,38 @@ async function aiFill() {
 
     if (tid === "deteriorating_patient") {
       if (s.action) setAction(s.action);
+    } else if (tid === "sepsis_bundle") {
+      set("f-priority", s.priority || "");
+      // Tick bundle element checkboxes
+      const bundleMap = {
+        blood_cultures: "be-bc",
+        broad_spectrum_antibiotics: "be-ab",
+        iv_fluid_bolus: "be-fl",
+        lactate_measurement: "be-la",
+        vasopressors: "be-vp",
+      };
+      // Uncheck all first
+      Object.values(bundleMap).forEach(id => { const el=document.getElementById(id); if(el) el.checked=false; });
+      // Check the ones the AI selected
+      (s.bundle_elements || []).forEach(elem => {
+        const cbId = bundleMap[elem.toLowerCase().replace(/ /g,"_").replace(/-/g,"_")];
+        if (cbId) { const el=document.getElementById(cbId); if(el) el.checked=true; }
+      });
+      set("f-antibiotic", s.antibiotic_choice || "");
+      if (s.fluid_volume_ml != null) set("f-fluid", s.fluid_volume_ml);
+      if (s.vasopressor_indicated != null) set("f-vasopressor", s.vasopressor_indicated ? "true" : "false");
+    } else if (tid === "paediatric_triage") {
+      set("f-priority", s.priority || "");
+      set("f-age-group", s.age_group || "");
+      if (s.pews_score != null) set("f-pews", s.pews_score);
+      set("f-sign", s.critical_sign || "");
+      set("f-action", s.recommended_action || "");
+    } else if (tid === "medication_reconciliation") {
+      if (s.issues_found) set("f-issues", (s.issues_found||[]).join(", "));
+      set("f-severity", s.severity || "");
+      set("f-action", s.recommended_action || "");
+      if (s.requires_pharmacist != null) set("f-pharmacist", s.requires_pharmacist ? "true" : "false");
+      if (s.drug_to_withhold) set("f-drug-withhold", s.drug_to_withhold);
     } else {
       set("f-priority", s.priority || "");
       set("f-news2", s.news2_score ?? "");
@@ -1338,16 +1601,20 @@ function switchTab(tab) {
 let lcChart = null, tbChart = null;
 
 const TASK_COLORS = {
-  simple_triage:        '#5cb85c',
-  conflicting_vitals:   '#f0ad4e',
-  masked_deterioration: '#e05c5c',
-  demographic_fairness: '#6ab0f5',
-  deteriorating_patient:'#b06bf5',
+  simple_triage:            '#5cb85c',
+  conflicting_vitals:       '#f0ad4e',
+  masked_deterioration:     '#e05c5c',
+  demographic_fairness:     '#6ab0f5',
+  deteriorating_patient:    '#b06bf5',
+  sepsis_bundle:            '#20c997',
+  paediatric_triage:        '#fd7e14',
+  medication_reconciliation:'#e83e8c',
 };
 const TASK_SHORT = {
   simple_triage:'Simple',conflicting_vitals:'Conflicting',
   masked_deterioration:'Masked',demographic_fairness:'Fairness',
-  deteriorating_patient:'Deterioration'
+  deteriorating_patient:'Deterioration',sepsis_bundle:'Sepsis',
+  paediatric_triage:'Paediatric',medication_reconciliation:'MedRec'
 };
 
 async function loadTrainingData() {
@@ -1366,8 +1633,8 @@ async function loadTrainingData() {
 function renderStats(stats) {
   const totalEpisodes = stats.total_episodes || 0;
   document.getElementById('stat-episodes').textContent = totalEpisodes;
-  document.getElementById('stat-avg').textContent = stats.overall_avg != null ? stats.overall_avg.toFixed(3) : '—';
-  document.getElementById('stat-best').textContent = stats.best_score != null ? stats.best_score.toFixed(3) : '—';
+  document.getElementById('stat-avg').textContent = stats.overall_avg != null ? fmtR(stats.overall_avg) : '—';
+  document.getElementById('stat-best').textContent = stats.best_score != null ? fmtR(stats.best_score) : '—';
   document.getElementById('stat-tasks').textContent = Object.keys(stats.by_task || {}).length;
   const hint = document.getElementById('training-empty-hint');
   if (hint) hint.style.display = totalEpisodes > 0 ? 'none' : 'block';
@@ -1383,7 +1650,7 @@ function renderLearningCurve(episodes) {
   }
 
   // Separate scatter series per task so dots are colour-coded by difficulty
-  const taskOrder = ['simple_triage','conflicting_vitals','masked_deterioration','demographic_fairness','deteriorating_patient'];
+  const taskOrder = ['simple_triage','conflicting_vitals','masked_deterioration','demographic_fairness','deteriorating_patient','sepsis_bundle','paediatric_triage','medication_reconciliation'];
   const byTask = {};
   episodes.forEach((e, i) => {
     if (!byTask[e.task_id]) byTask[e.task_id] = [];
@@ -1443,7 +1710,7 @@ function renderLearningCurve(episodes) {
             label: item => {
               const ep = episodes[Math.round(item.parsed.x) - 1];
               if (!ep) return 'Avg: ' + item.parsed.y.toFixed(3);
-              const parts = [TASK_SHORT[ep.task_id] + ' | ' + ep.case_id, 'Score: ' + ep.reward.toFixed(3)];
+              const parts = [TASK_SHORT[ep.task_id] + ' | ' + ep.case_id, 'Score: ' + fmtR(ep.reward)];
               const bd = Object.entries(ep.breakdown||{}).filter(([k])=>!k.startsWith('_')).slice(0,3);
               if (bd.length) parts.push(bd.map(([k,v])=>k.replace(/_/g,' ')+': '+v).join('  '));
               return parts;
@@ -1479,7 +1746,7 @@ function renderTaskBars(stats) {
     ctx.fillText('No data yet — submit assessments to see scores by task',ctx.canvas.width/2,60);
     return;
   }
-  const taskOrder = ['simple_triage','conflicting_vitals','masked_deterioration','demographic_fairness','deteriorating_patient'];
+  const taskOrder = ['simple_triage','conflicting_vitals','masked_deterioration','demographic_fairness','deteriorating_patient','sepsis_bundle','paediatric_triage','medication_reconciliation'];
   const present = taskOrder.filter(t => byTask[t]);
   if (!present.length) return;
 
@@ -1530,7 +1797,7 @@ function renderEpisodeTable(episodes) {
       <span style="color:var(--muted);min-width:28px">#${e.n}</span>
       <span style="min-width:90px;color:${TASK_COLORS[e.task_id]||'#888'}">${TASK_SHORT[e.task_id]||e.task_id}</span>
       <span style="min-width:50px;color:var(--muted)">${e.case_id}</span>
-      <span style="font-weight:600;color:${e.reward>=0.85?'#5cb85c':e.reward>=0.55?'#f0ad4e':'#e05c5c'}">${e.reward.toFixed(3)}</span>
+      <span style="font-weight:600;color:${e.reward>=0.85?'#5cb85c':e.reward>=0.55?'#f0ad4e':'#e05c5c'}">${fmtR(e.reward)}</span>
       <span style="color:var(--muted);font-size:11px">${Object.entries(e.breakdown||{}).map(([k,v])=>k.replace(/_/g,' ')+':'+v).join(' | ')}</span>
     </div>`
   ).join('');

@@ -32,6 +32,140 @@ from models import task_score_for_api
 
 
 # ─────────────────────────────────────────────────────────────
+# SYNONYM NORMALIZATION
+# Frontier LLMs produce clinically equivalent answers that differ
+# lexically from ground truth (e.g. "tachycardia" vs "heart_rate").
+# These helpers canonicalize agent strings before comparison so
+# correct clinical reasoning is not penalised for terminology choice.
+# Rules: purely additive — never removes previously accepted strings.
+# ─────────────────────────────────────────────────────────────
+
+VITAL_SIGN_SYNONYMS: dict[str, list[str]] = {
+    "respiratory_rate": [
+        "rr", "respiratory rate", "resp rate", "resp_rate", "breathing rate",
+        "respiration rate", "respiratory", "respiration",
+    ],
+    "heart_rate": [
+        "hr", "heart rate", "pulse", "tachycardia", "bradycardia",
+        "pulse rate", "cardiac rate", "heart rhythm",
+    ],
+    "spo2": [
+        "oxygen saturation", "o2 sat", "oxygen_saturation", "saturation",
+        "o2sat", "pulse ox", "pulseox", "pulse oximetry", "spo2",
+        "blood oxygen", "oxygen level",
+    ],
+    "systolic_bp": [
+        "blood pressure", "bp", "sbp", "systolic", "systolic bp",
+        "systolic blood pressure", "hypotension", "hypertension",
+        "arterial pressure", "map",
+    ],
+    "temperature": [
+        "temp", "fever", "pyrexia", "hypothermia", "body temperature",
+        "core temperature",
+    ],
+    "consciousness": [
+        "avpu", "altered consciousness", "level of consciousness", "loc",
+        "mental status", "gcs", "confused", "confusion", "alertness",
+        "conscious level", "neurological status", "orientation",
+    ],
+    "none": [
+        "no critical sign", "all normal", "none identified", "nil",
+        "nothing", "no abnormality", "within normal limits",
+    ],
+}
+
+# Build reverse lookup: normalised synonym string → canonical key
+_VITAL_NORM: dict[str, str] = {}
+for _canon, _syns in VITAL_SIGN_SYNONYMS.items():
+    _VITAL_NORM[_canon] = _canon          # canonical maps to itself
+    for _s in _syns:
+        _VITAL_NORM[_s.lower()] = _canon
+
+
+def _normalize_vital_sign(s: str) -> str:
+    """
+    Map an agent's vital-sign string to its canonical form.
+    Tries both underscore and space variants for robustness.
+    Returns the input unchanged if no synonym is found.
+    """
+    if not s:
+        return s
+    lowered = s.lower().strip()
+    if lowered in _VITAL_NORM:
+        return _VITAL_NORM[lowered]
+    # Also try with spaces replaced by underscores and vice-versa
+    underscored = lowered.replace(" ", "_").replace("-", "_")
+    if underscored in _VITAL_NORM:
+        return _VITAL_NORM[underscored]
+    spaced = lowered.replace("_", " ").replace("-", " ")
+    if spaced in _VITAL_NORM:
+        return _VITAL_NORM[spaced]
+    return lowered  # Return cleaned input as-is if no match
+
+
+CONDITION_SYNONYMS: dict[str, list[str]] = {
+    "silent_hypoxia": [
+        "hypoxia", "hypoxemia", "silent hypoxia", "oxygen deficiency",
+        "low oxygen", "oxygen desaturation",
+    ],
+    "septic_shock": [
+        "sepsis", "septicaemia", "septicemia", "bacteraemia", "bacteremia",
+        "septic shock", "blood poisoning", "systemic infection",
+    ],
+    "post_op_sepsis": [
+        "postoperative sepsis", "post-op sepsis", "post operative infection",
+        "surgical sepsis", "post surgical infection",
+    ],
+    "tachycardia_undifferentiated": [
+        "tachycardia", "svt", "supraventricular tachycardia",
+        "undifferentiated tachycardia", "rapid heart rate", "fast heart rate",
+    ],
+    "silent_mi": [
+        "silent myocardial infarction", "silent heart attack", "stemi",
+        "nstemi", "myocardial infarction", "heart attack", "mi",
+        "acute coronary syndrome", "acs",
+    ],
+    "addisonian_crisis": [
+        "adrenal crisis", "adrenal insufficiency", "addisons crisis",
+        "addison crisis", "hypoadrenalism", "adrenocortical insufficiency",
+    ],
+    "hyperkalaemia": [
+        "hyperkalemia", "high potassium", "elevated potassium",
+        "dangerous potassium", "hyperkalaemia", "raised potassium",
+    ],
+    "diabetic_ketoacidosis": [
+        "dka", "diabetic ketoacidosis", "ketoacidosis", "diabetic keto",
+    ],
+    "pulmonary_embolism": [
+        "pe", "pulmonary embolism", "pulmonary embolus", "lung clot",
+        "blood clot in lung",
+    ],
+}
+
+_CONDITION_NORM: dict[str, str] = {}
+for _canon, _syns in CONDITION_SYNONYMS.items():
+    _CONDITION_NORM[_canon] = _canon
+    for _s in _syns:
+        _CONDITION_NORM[_s.lower()] = _canon
+
+
+def _normalize_condition(s: str) -> str:
+    """Map an agent condition string to its canonical form."""
+    if not s:
+        return s
+    lowered = s.lower().strip()
+    if lowered in _CONDITION_NORM:
+        return _CONDITION_NORM[lowered]
+    underscored = lowered.replace(" ", "_").replace("-", "_")
+    if underscored in _CONDITION_NORM:
+        return _CONDITION_NORM[underscored]
+    spaced = lowered.replace("_", " ").replace("-", " ")
+    if spaced in _CONDITION_NORM:
+        return _CONDITION_NORM[spaced]
+    return lowered
+
+
+# ─────────────────────────────────────────────────────────────
 # NEWS2 SCORING SYSTEM
 # Source: Royal College of Physicians UK (2017)
 # ─────────────────────────────────────────────────────────────
@@ -223,8 +357,8 @@ def grade_simple_triage(agent_response: dict[str, Any], case: dict[str, Any]) ->
     total += breakdown["news2_score"]
 
     # 3. Critical sign (0.20)
-    agent_critical = (agent_response.get("critical_sign") or "").lower().strip()
-    true_critical = gt["critical_sign"].lower()
+    agent_critical = _normalize_vital_sign(agent_response.get("critical_sign") or "")
+    true_critical = _normalize_vital_sign(gt["critical_sign"])
     if not agent_critical:                         # No answer -> 0
         critical_score = 0.0
     elif agent_critical == true_critical:
@@ -296,12 +430,12 @@ def grade_conflicting_vitals(agent_response: dict[str, Any], case: dict[str, Any
     total += breakdown["priority"]
 
     # 2. Critical sign (0.25) — must resist misleading normals
-    agent_critical = (agent_response.get("critical_sign") or "").lower().strip()
-    true_critical = gt["critical_sign"].lower()
-    misleading = [s.lower() for s in gt.get("misleading_signs", [])]
+    agent_critical = _normalize_vital_sign(agent_response.get("critical_sign") or "")
+    true_critical = _normalize_vital_sign(gt["critical_sign"])
+    misleading_norm = [_normalize_vital_sign(s) for s in gt.get("misleading_signs", [])]
     if agent_critical == true_critical:
         cs_score = 1.0
-    elif agent_critical in misleading:
+    elif agent_critical in misleading_norm:
         cs_score = 0.0  # Fell for the trap
     else:
         cs_score = 0.2
@@ -309,10 +443,10 @@ def grade_conflicting_vitals(agent_response: dict[str, Any], case: dict[str, Any
     total += breakdown["critical_sign"]
 
     # 3. Misleading signs identified (0.20)
-    agent_misleading = [s.lower().strip() for s in (agent_response.get("misleading_signs") or [])]
-    if misleading:
-        hits = sum(1 for s in misleading if s in agent_misleading)
-        misleading_score = hits / len(misleading)
+    agent_misleading_norm = [_normalize_vital_sign(s) for s in (agent_response.get("misleading_signs") or [])]
+    if misleading_norm:
+        hits = sum(1 for s in misleading_norm if s in agent_misleading_norm)
+        misleading_score = hits / len(misleading_norm)
     else:
         misleading_score = 1.0
     breakdown["misleading_signs"] = round(misleading_score * 0.20, 3)
@@ -386,13 +520,19 @@ def grade_masked_deterioration(agent_response: dict[str, Any], case: dict[str, A
     total += breakdown["masking_mechanism"]
 
     # 3. Masked sign identified (0.25)
-    agent_masked = (agent_response.get("masked_sign") or "").lower().strip()
+    agent_masked_raw = (agent_response.get("masked_sign") or "").lower().strip()
+    agent_masked = _normalize_vital_sign(agent_masked_raw)
     true_masked = gt["masked_sign"].lower()
-    masked_keywords = true_masked.replace("_and_", " ").replace("_", " ").split()
-    if any(kw in agent_masked for kw in masked_keywords if len(kw) > 3):
+    true_masked_norm = _normalize_vital_sign(true_masked)
+    # Try direct canonical match first, then fall back to keyword substring matching
+    if agent_masked == true_masked_norm:
         masked_score = 1.0
     else:
-        masked_score = 0.0
+        masked_keywords = true_masked.replace("_and_", " ").replace("_", " ").split()
+        if any(kw in agent_masked for kw in masked_keywords if len(kw) > 3):
+            masked_score = 1.0
+        else:
+            masked_score = 0.0
     breakdown["masked_sign"] = round(masked_score * 0.25, 3)
     total += breakdown["masked_sign"]
 
@@ -814,11 +954,12 @@ def grade_confidence_calibration(confidence: float | None,
     Hard cases (high NEWS2, masked): moderate confidence expected.
     Got it wrong: low confidence rewarded (appropriate uncertainty).
 
-    Returns bonus in [0.0, 0.05] added to existing score.
-    Max capped at 0.05 (not 0.10) to prevent trivial gaming by always
-    submitting a fixed confidence value regardless of actual certainty.
+    Returns bonus in [0.0, 0.10] added to existing score.
+    Max raised from 0.05 → 0.10 to incentivise genuine uncertainty quantification.
     True calibration signal: the MATCH between expressed confidence and
     case difficulty matters more than the absolute value.
+    Trivial gaming is prevented because: (a) overconfidence on hard cases is penalised,
+    (b) underconfidence on easy correct answers is penalised.
     """
     if confidence is None:
         return 0.0
@@ -829,18 +970,18 @@ def grade_confidence_calibration(confidence: float | None,
         if news2_score <= 2:
             # Easy case, correct answer: high confidence (>0.85) is well-calibrated
             # Submitting 0.5 on an easy correct answer is poorly calibrated — no bonus
-            return 0.05 if confidence >= 0.85 else 0.02 if confidence >= 0.70 else 0.0
+            return 0.10 if confidence >= 0.85 else 0.04 if confidence >= 0.70 else 0.0
         elif news2_score >= 7:
             # Hard case, correct answer: moderate confidence (0.55-0.85) is well-calibrated
             # Overconfidence (>0.90) on a hard case = poor calibration
-            return 0.05 if 0.55 <= confidence <= 0.85 else 0.02 if confidence < 0.55 else 0.0
+            return 0.10 if 0.55 <= confidence <= 0.85 else 0.04 if confidence < 0.55 else 0.0
         else:
             # Medium case: confidence in 0.60-0.88 is well-calibrated
-            return 0.04 if 0.60 <= confidence <= 0.88 else 0.01
+            return 0.08 if 0.60 <= confidence <= 0.88 else 0.02
     else:
         # Got it wrong: rewarded ONLY for genuine uncertainty (confidence ≤ 0.45)
         # A model that submits confidence=0.8 on a wrong answer should not be rewarded
-        return 0.05 if confidence <= 0.45 else 0.02 if confidence <= 0.60 else 0.0
+        return 0.10 if confidence <= 0.45 else 0.04 if confidence <= 0.60 else 0.0
 
 
 # ─────────────────────────────────────────────────────────────
@@ -852,3 +993,469 @@ GRADER_MAP["demographic_fairness"] = grade_single_fairness_variant
 # _step_deteriorating() which calls grade_deteriorating_patient_step() directly
 # with the correct step_index. Adding it here with a fixed step_index=0 would
 # be misleading dead code.
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 6 — SEPSIS BUNDLE COMPLIANCE GRADER
+# Source: Surviving Sepsis Campaign 2021 Hour-1 Bundle
+# Weights: bundle completeness 0.50, antibiotic 0.25, fluid 0.15, vasopressor 0.10
+# ─────────────────────────────────────────────────────────────
+
+# Canonical antibiotic names (normalise common variants before lookup)
+_ANTIBIOTIC_ALIASES: dict[str, str] = {
+    "pip_taz": "piperacillin_tazobactam",
+    "pip-taz": "piperacillin_tazobactam",
+    "tazocin": "piperacillin_tazobactam",
+    "piptaz": "piperacillin_tazobactam",
+    "piperacillin tazobactam": "piperacillin_tazobactam",
+    "co-amoxiclav": "co-amoxiclav",
+    "co amoxiclav": "co-amoxiclav",
+    "amoxicillin clavulanate": "amoxicillin_clavulanate",
+    "amoxicillin-clavulanate": "amoxicillin_clavulanate",
+    "augmentin": "amoxicillin_clavulanate",
+    "levofloxacin": "levofloxacin",
+    "ciprofloxacin": "ciprofloxacin",
+    "cipro": "ciprofloxacin",
+    "meropenem": "meropenem",
+    "merrem": "meropenem",
+    "ceftriaxone": "ceftriaxone",
+    "rocephin": "ceftriaxone",
+    "aztreonam": "aztreonam",
+    "vancomycin": "vancomycin",
+    "clindamycin": "clindamycin",
+    "azithromycin": "azithromycin",
+    "gentamicin": "gentamicin",
+    "flucloxacillin": "flucloxacillin",
+    "amoxicillin": "amoxicillin",
+}
+
+# Canonical bundle element names (normalise spacing/dashes)
+_BUNDLE_ALIASES: dict[str, str] = {
+    "blood cultures": "blood_cultures",
+    "blood culture": "blood_cultures",
+    "broad spectrum antibiotics": "broad_spectrum_antibiotics",
+    "broad-spectrum antibiotics": "broad_spectrum_antibiotics",
+    "antibiotics": "broad_spectrum_antibiotics",
+    "iv fluid bolus": "iv_fluid_bolus",
+    "iv fluids": "iv_fluid_bolus",
+    "fluid bolus": "iv_fluid_bolus",
+    "fluids": "iv_fluid_bolus",
+    "lactate": "lactate_measurement",
+    "lactate level": "lactate_measurement",
+    "serum lactate": "lactate_measurement",
+    "lactate measurement": "lactate_measurement",
+    "vasopressors": "vasopressors",
+    "vasopressor": "vasopressors",
+    "noradrenaline": "vasopressors",
+    "norepinephrine": "vasopressors",
+}
+
+
+def _normalise_bundle_element(s: str) -> str:
+    cleaned = s.lower().strip()
+    return _BUNDLE_ALIASES.get(cleaned, cleaned.replace(" ", "_").replace("-", "_"))
+
+
+def _normalise_antibiotic(s: str) -> str:
+    cleaned = s.lower().strip()
+    return _ANTIBIOTIC_ALIASES.get(cleaned, cleaned.replace(" ", "_").replace("-", "_"))
+
+
+def grade_sepsis_bundle(
+    agent_response: dict[str, Any],
+    case: dict[str, Any],
+) -> tuple[float, dict]:
+    """
+    Grade Hour-1 Sepsis Bundle compliance.
+
+    Scoring dimensions:
+      bundle_completeness  0.50  — fraction of required elements selected
+      antibiotic           0.25  — correct class, penalise contraindicated
+      fluid_volume         0.15  — within ±250ml of target = 1.0, ±500ml = 0.5
+      vasopressor          0.10  — correct boolean decision
+    """
+    gt = case["ground_truth"]
+    required: list[str] = gt["required_bundle_elements"]
+    target_fluid: int = gt["target_fluid_ml"]
+    accepted_abs: list[str] = [_normalise_antibiotic(a) for a in gt["accepted_antibiotics"]]
+    contraindicated_abs: list[str] = [
+        _normalise_antibiotic(a)
+        for a in gt.get("contraindicated_antibiotics", [])
+    ]
+    gt_vasopressor: bool = gt["vasopressor_indicated"]
+
+    # ── Bundle completeness (0.50) ────────────────────────────
+    agent_bundle_raw: list = agent_response.get("bundle_elements") or []
+    agent_bundle = {_normalise_bundle_element(e) for e in agent_bundle_raw}
+    required_set = set(required)
+    correct_elements = agent_bundle & required_set
+    spurious_elements = agent_bundle - required_set   # hallucinated items
+
+    if required_set:
+        completeness = len(correct_elements) / len(required_set)
+        # Small penalty per spurious element (capped at 0.20 deduction)
+        spurious_penalty = min(0.20, len(spurious_elements) * 0.05)
+        completeness = max(0.0, completeness - spurious_penalty)
+    else:
+        completeness = 0.0
+
+    bundle_score = completeness * 0.50
+
+    # ── Antibiotic appropriateness (0.25) ─────────────────────
+    agent_ab_raw: str = (agent_response.get("antibiotic_choice") or "").strip()
+    agent_ab = _normalise_antibiotic(agent_ab_raw) if agent_ab_raw else ""
+
+    if not agent_ab:
+        ab_score = 0.0
+        ab_verdict = "missing"
+    elif agent_ab in contraindicated_abs:
+        ab_score = 0.0   # contraindicated = zero credit, clinically dangerous
+        ab_verdict = "contraindicated"
+    elif agent_ab in accepted_abs:
+        ab_score = 1.0
+        ab_verdict = "correct"
+    else:
+        # Unknown antibiotic: partial credit if broad-spectrum class keyword present
+        broad_spectrum_keywords = ["meropenem", "ceftriaxone", "levofloxacin",
+                                   "ciprofloxacin", "vancomycin", "aztreonam",
+                                   "clindamycin", "azithromycin"]
+        if any(kw in agent_ab for kw in broad_spectrum_keywords):
+            ab_score = 0.5
+            ab_verdict = "broad_spectrum_partial"
+        else:
+            ab_score = 0.15
+            ab_verdict = "unknown"
+
+    antibiotic_score = ab_score * 0.25
+
+    # ── Fluid volume (0.15) ───────────────────────────────────
+    agent_fluid = agent_response.get("fluid_volume_ml")
+    if agent_fluid is None:
+        fluid_score = 0.0
+        fluid_verdict = "missing"
+    else:
+        diff = abs(int(agent_fluid) - target_fluid)
+        if diff <= 250:
+            fluid_score = 1.0
+            fluid_verdict = "correct"
+        elif diff <= 500:
+            fluid_score = 0.5
+            fluid_verdict = "close"
+        elif diff <= 1000:
+            fluid_score = 0.25
+            fluid_verdict = "off"
+        else:
+            fluid_score = 0.0
+            fluid_verdict = "far_off"
+
+    fluid_component = fluid_score * 0.15
+
+    # ── Vasopressor decision (0.10) ───────────────────────────
+    agent_vasopressor = agent_response.get("vasopressor_indicated")
+    if agent_vasopressor is None:
+        vasopr_score = 0.0
+        vasopr_verdict = "missing"
+    elif bool(agent_vasopressor) == gt_vasopressor:
+        vasopr_score = 1.0
+        vasopr_verdict = "correct"
+    else:
+        vasopr_score = 0.0
+        vasopr_verdict = "wrong"
+
+    vasopressor_component = vasopr_score * 0.10
+
+    # ── Total ─────────────────────────────────────────────────
+    total = bundle_score + antibiotic_score + fluid_component + vasopressor_component
+    total = max(0.0, min(1.0, total))
+
+    breakdown = {
+        "bundle_completeness": round(bundle_score, 4),
+        "antibiotic": round(antibiotic_score, 4),
+        "fluid_volume": round(fluid_component, 4),
+        "vasopressor": round(vasopressor_component, 4),
+        "total": round(total, 4),
+        "_bundle_correct_elements": sorted(correct_elements),
+        "_bundle_spurious_elements": sorted(spurious_elements),
+        "_ab_verdict": ab_verdict,
+        "_fluid_verdict": fluid_verdict,
+        "_vasopr_verdict": vasopr_verdict,
+    }
+
+    # Feedback text
+    parts = []
+    if len(correct_elements) < len(required_set):
+        missing = required_set - correct_elements
+        parts.append(f"Missing bundle elements: {sorted(missing)}")
+    if spurious_elements:
+        parts.append(f"Spurious elements (not required): {sorted(spurious_elements)}")
+    if ab_verdict == "contraindicated":
+        parts.append(f"CONTRAINDICATED antibiotic chosen: {agent_ab}")
+    elif ab_verdict == "missing":
+        parts.append("No antibiotic_choice provided")
+    elif ab_verdict not in ("correct",):
+        parts.append(f"Antibiotic '{agent_ab}' not in accepted list for this case")
+    if fluid_verdict in ("off", "far_off", "missing"):
+        parts.append(f"Fluid volume {agent_fluid}ml vs target {target_fluid}ml")
+    if vasopr_verdict == "wrong":
+        parts.append(f"Vasopressor decision incorrect (expected {gt_vasopressor})")
+
+    feedback = "; ".join(parts) if parts else "Excellent sepsis bundle compliance!"
+    breakdown["feedback"] = feedback
+
+    return total, breakdown
+
+
+GRADER_MAP["sepsis_bundle"] = grade_sepsis_bundle
+
+
+# ─────────────────────────────────────────────────────────────
+# PAEDIATRIC TRIAGE GRADER (PEWS-based)
+# ─────────────────────────────────────────────────────────────
+
+# Age-group synonym normalization
+_AGE_GROUP_SYNONYMS: dict[str, list[str]] = {
+    "infant":      ["infant", "baby", "neonate", "newborn", "0-1", "under 1", "under one"],
+    "toddler":     ["toddler", "1-3", "one to three", "1 to 3"],
+    "preschool":   ["preschool", "pre-school", "pre school", "3-5", "3 to 5"],
+    "school_age":  ["school_age", "school age", "school-age", "5-12", "5 to 12", "primary"],
+    "adolescent":  ["adolescent", "teen", "teenager", "12-18", "12 to 18", "secondary"],
+}
+_AGE_NORM: dict[str, str] = {}
+for _canonical, _syns in _AGE_GROUP_SYNONYMS.items():
+    for _s in _syns:
+        _AGE_NORM[_s.lower()] = _canonical
+
+
+def _normalise_age_group(s: str) -> str:
+    cleaned = s.lower().strip().replace("-", "_").replace(" ", "_")
+    if cleaned in _AGE_NORM:
+        return _AGE_NORM[cleaned]
+    cleaned_space = s.lower().strip()
+    if cleaned_space in _AGE_NORM:
+        return _AGE_NORM[cleaned_space]
+    return cleaned
+
+
+_PAED_ACTION_SYNONYMS: dict[str, list[str]] = {
+    "emergency_response":  ["emergency_response", "emergency response", "emergency", "immediate", "resuscitation", "code"],
+    "urgent_review":       ["urgent_review", "urgent review", "urgent", "expedited", "prompt review"],
+    "routine_monitoring":  ["routine_monitoring", "routine monitoring", "routine_review", "routine review",
+                            "routine", "standard", "elective", "discharge_safe"],
+    "monitor":             ["monitor", "observe", "watch", "monitoring"],
+}
+_PAED_ACTION_NORM: dict[str, str] = {}
+for _canonical, _syns in _PAED_ACTION_SYNONYMS.items():
+    for _s in _syns:
+        _PAED_ACTION_NORM[_s.lower()] = _canonical
+
+
+def _normalise_paed_action(s: str) -> str:
+    cleaned = s.lower().strip().replace("-", "_").replace(" ", "_")
+    if cleaned in _PAED_ACTION_NORM:
+        return _PAED_ACTION_NORM[cleaned]
+    cleaned_space = s.lower().strip()
+    if cleaned_space in _PAED_ACTION_NORM:
+        return _PAED_ACTION_NORM[cleaned_space]
+    return cleaned
+
+
+def grade_paediatric_triage(
+    agent_response: dict[str, Any],
+    case: dict[str, Any],
+) -> tuple[float, dict]:
+    """
+    Grade PEWS-based paediatric triage response.
+
+    Scoring dimensions:
+      priority         0.35  — critical / high / medium / low
+      age_group        0.25  — infant / toddler / preschool / school_age / adolescent
+      critical_sign    0.25  — dominant abnormal vital sign (synonym-normalised)
+      recommended_action 0.15 — emergency_response / urgent_review / routine_monitoring
+    """
+    gt = case["ground_truth"]
+
+    breakdown: dict[str, Any] = {}
+    total = 0.0
+
+    # ── Priority (0.35) ──────────────────────────────────────
+    PRIORITY_ORDER = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+    agent_priority = (agent_response.get("priority") or "").lower().strip()
+    gt_priority = gt["priority"].lower().strip()
+    if not agent_priority or agent_priority not in PRIORITY_ORDER:
+        priority_score = 0.0
+    elif agent_priority == gt_priority:
+        priority_score = 1.0
+    else:
+        # Partial credit for adjacent priority level
+        diff = abs(PRIORITY_ORDER.get(gt_priority, 1) - PRIORITY_ORDER[agent_priority])
+        priority_score = max(0.0, 1.0 - diff * 0.5)
+    breakdown["priority"] = round(priority_score * 0.35, 4)
+    total += breakdown["priority"]
+
+    # ── Age group (0.25) ─────────────────────────────────────
+    agent_age = _normalise_age_group(agent_response.get("age_group") or "")
+    gt_age = _normalise_age_group(gt["age_group"])
+    age_score = 1.0 if agent_age == gt_age else 0.0
+    breakdown["age_group"] = round(age_score * 0.25, 4)
+    total += breakdown["age_group"]
+
+    # ── Critical sign (0.25) ─────────────────────────────────
+    agent_sign = _normalize_vital_sign(agent_response.get("critical_sign") or "")
+    gt_sign = _normalize_vital_sign(gt["critical_sign"])
+    sign_score = 1.0 if agent_sign == gt_sign else 0.0
+    breakdown["critical_sign"] = round(sign_score * 0.25, 4)
+    total += breakdown["critical_sign"]
+
+    # ── Recommended action (0.15) ────────────────────────────
+    agent_action = _normalise_paed_action(agent_response.get("recommended_action") or "")
+    gt_action = _normalise_paed_action(gt["recommended_action"])
+    action_score = 1.0 if agent_action == gt_action else 0.0
+    breakdown["recommended_action"] = round(action_score * 0.15, 4)
+    total += breakdown["recommended_action"]
+
+    total = max(0.0, min(1.0, total))
+    breakdown["total"] = round(total, 4)
+
+    # Feedback
+    parts = []
+    if priority_score < 1.0:
+        parts.append(f"Priority: expected '{gt_priority}', got '{agent_priority}'")
+    if age_score < 1.0:
+        parts.append(f"Age group: expected '{gt_age}', got '{agent_age}'")
+    if sign_score < 1.0:
+        parts.append(f"Critical sign: expected '{gt_sign}', got '{agent_sign}'")
+    if action_score < 1.0:
+        parts.append(f"Recommended action: expected '{gt_action}', got '{agent_action}'")
+    breakdown["feedback"] = "; ".join(parts) if parts else "Correct paediatric triage!"
+
+    return total, breakdown
+
+
+GRADER_MAP["paediatric_triage"] = grade_paediatric_triage
+
+
+# ─────────────────────────────────────────────────────────────
+# MEDICATION RECONCILIATION GRADER
+# ─────────────────────────────────────────────────────────────
+
+_SEVERITY_ORDER = {"critical": 3, "high": 2, "medium": 1, "low": 0}
+
+_MR_ACTION_SYNONYMS: dict[str, list[str]] = {
+    "withhold_drug":    ["withhold_drug", "withhold drug", "withhold", "stop drug", "stop", "hold", "discontinue"],
+    "modify_dose":      ["modify_dose", "modify dose", "reduce dose", "dose reduction", "reduce", "adjust_dose", "adjust dose"],
+    "emergency_review": ["emergency_review", "emergency review", "urgent_escalation", "urgent escalation", "immediate review",
+                         "urgent review required", "stop and review", "hold and review"],
+    "safe_to_prescribe":["safe_to_prescribe", "safe to prescribe", "no_issues", "no issues", "no action needed", "prescribe safely"],
+    "add_monitoring":   ["add_monitoring", "add monitoring", "increase monitoring", "close monitoring", "enhanced monitoring"],
+    "no_action":        ["no_action", "no action", "continue", "ok", "safe", "continue as prescribed"],
+}
+_MR_ACTION_NORM: dict[str, str] = {}
+for _canonical, _syns in _MR_ACTION_SYNONYMS.items():
+    for _s in _syns:
+        _MR_ACTION_NORM[_s.lower()] = _canonical
+
+
+def _normalise_mr_action(s: str) -> str:
+    cleaned = s.lower().strip().replace("-", "_").replace(" ", "_")
+    if cleaned in _MR_ACTION_NORM:
+        return _MR_ACTION_NORM[cleaned]
+    cleaned_space = s.lower().strip()
+    if cleaned_space in _MR_ACTION_NORM:
+        return _MR_ACTION_NORM[cleaned_space]
+    return cleaned
+
+
+def _normalise_issue(s: str) -> str:
+    """Normalise an issue string: lowercase, collapse spaces/hyphens to underscores."""
+    return s.lower().strip().replace(" ", "_").replace("-", "_")
+
+
+def grade_medication_reconciliation(
+    agent_response: dict[str, Any],
+    case: dict[str, Any],
+) -> tuple[float, dict]:
+    """
+    Grade medication reconciliation response.
+
+    Scoring dimensions:
+      issues_found      0.40  — fraction of GT issues identified (partial credit)
+      severity          0.30  — critical / high / medium / low
+      recommended_action 0.20 — withhold_drug / modify_dose / emergency_review / safe_to_prescribe
+      requires_pharmacist 0.10 — boolean
+    """
+    gt = case["ground_truth"]
+    breakdown: dict[str, Any] = {}
+    total = 0.0
+
+    # ── Issues found (0.40) ──────────────────────────────────
+    agent_issues_raw: list = agent_response.get("issues_found") or []
+    agent_issues = {_normalise_issue(i) for i in agent_issues_raw}
+    gt_issues = {_normalise_issue(i) for i in gt["issues_found"]}
+
+    if gt_issues:
+        correct_issues = agent_issues & gt_issues
+        spurious_issues = agent_issues - gt_issues
+        issues_recall = len(correct_issues) / len(gt_issues)
+        # Small penalty for hallucinated issues (max 0.20 deduction)
+        spurious_penalty = min(0.20, len(spurious_issues) * 0.05)
+        issues_score = max(0.0, issues_recall - spurious_penalty)
+    else:
+        correct_issues = set()
+        spurious_issues = agent_issues
+        issues_score = 1.0 if not agent_issues else 0.5
+
+    breakdown["issues_found"] = round(issues_score * 0.40, 4)
+    total += breakdown["issues_found"]
+
+    # ── Severity (0.30) ──────────────────────────────────────
+    agent_severity = (agent_response.get("severity") or "").lower().strip()
+    gt_severity = gt["severity"].lower().strip()
+    if agent_severity == gt_severity:
+        severity_score = 1.0
+    else:
+        diff = abs(_SEVERITY_ORDER.get(gt_severity, 1) - _SEVERITY_ORDER.get(agent_severity, 1))
+        severity_score = max(0.0, 1.0 - diff * 0.5)
+    breakdown["severity"] = round(severity_score * 0.30, 4)
+    total += breakdown["severity"]
+
+    # ── Recommended action (0.20) ────────────────────────────
+    agent_action = _normalise_mr_action(agent_response.get("recommended_action") or "")
+    gt_action = _normalise_mr_action(gt["recommended_action"])
+    action_score = 1.0 if agent_action == gt_action else 0.0
+    breakdown["recommended_action"] = round(action_score * 0.20, 4)
+    total += breakdown["recommended_action"]
+
+    # ── Requires pharmacist (0.10) ───────────────────────────
+    agent_pharm = agent_response.get("requires_pharmacist")
+    gt_pharm: bool = gt["requires_pharmacist"]
+    if agent_pharm is None:
+        pharm_score = 0.0
+    elif bool(agent_pharm) == gt_pharm:
+        pharm_score = 1.0
+    else:
+        pharm_score = 0.0
+    breakdown["requires_pharmacist"] = round(pharm_score * 0.10, 4)
+    total += breakdown["requires_pharmacist"]
+
+    total = max(0.0, min(1.0, total))
+    breakdown["total"] = round(total, 4)
+
+    # Feedback
+    parts = []
+    if gt_issues and correct_issues < gt_issues:
+        missing = gt_issues - correct_issues
+        parts.append(f"Missed issues: {sorted(missing)}")
+    if spurious_issues:
+        parts.append(f"Spurious issues: {sorted(spurious_issues)}")
+    if severity_score < 1.0:
+        parts.append(f"Severity: expected '{gt_severity}', got '{agent_severity}'")
+    if action_score < 1.0:
+        parts.append(f"Action: expected '{gt_action}', got '{agent_action}'")
+    if pharm_score < 1.0:
+        parts.append(f"requires_pharmacist: expected {gt_pharm}, got {agent_pharm}")
+    breakdown["feedback"] = "; ".join(parts) if parts else "Correct medication reconciliation!"
+
+    return total, breakdown
+
+
+GRADER_MAP["medication_reconciliation"] = grade_medication_reconciliation

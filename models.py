@@ -148,6 +148,52 @@ class TriageAction(BaseModel):
         description="Decision for dynamic triage: 'monitor' | 'escalate' | 'emergency_response'"
     )
 
+    # Task 6 specific (sepsis bundle compliance)
+    bundle_elements: Optional[list[str]] = Field(
+        default=None,
+        description="Hour-1 sepsis bundle elements selected: blood_cultures, broad_spectrum_antibiotics, iv_fluid_bolus, lactate_measurement, vasopressors"
+    )
+    fluid_volume_ml: Optional[int] = Field(
+        default=None,
+        description="IV fluid bolus volume in ml (typically 30ml/kg = ~2000ml)"
+    )
+    antibiotic_choice: Optional[str] = Field(
+        default=None,
+        description="Specific antibiotic chosen (e.g. piperacillin_tazobactam, meropenem, ceftriaxone)"
+    )
+    vasopressor_indicated: Optional[bool] = Field(
+        default=None,
+        description="Whether vasopressor therapy is indicated (true if MAP <65 despite fluids)"
+    )
+
+    # Task 7 specific (paediatric triage)
+    age_group: Optional[str] = Field(
+        default=None,
+        description="Paediatric age group: 'infant' | 'toddler' | 'preschool' | 'school_age' | 'adolescent'"
+    )
+    pews_score: Optional[int] = Field(
+        default=None,
+        description="Agent's computed PEWS (Paediatric Early Warning Score)"
+    )
+
+    # Task 8 specific (medication reconciliation)
+    issues_found: Optional[list[str]] = Field(
+        default=None,
+        description="List of identified medication safety issues (e.g. 'warfarin_nsaid_interaction')"
+    )
+    severity: Optional[str] = Field(
+        default=None,
+        description="Overall severity of identified medication issues: 'low' | 'medium' | 'high' | 'critical'"
+    )
+    requires_pharmacist: Optional[bool] = Field(
+        default=None,
+        description="Whether pharmacist review is required"
+    )
+    drug_to_withhold: Optional[str] = Field(
+        default=None,
+        description="Name of drug to withhold if recommended_action is 'withhold_drug'"
+    )
+
     # Optional free-text rationale (used in Task 2 grader)
     rationale: Optional[str] = Field(
         default=None,

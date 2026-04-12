@@ -70,8 +70,8 @@ def test_web_ui_placeholder_metrics_match_current_counts():
     assert resp.status_code == 200
     html = resp.text
 
-    assert '>28<' in html
-    assert '>116<' in html
+    assert '>63<' in html
+    assert '>152<' in html
 
 
 def test_web_ui_task_switch_clears_stale_form_state():

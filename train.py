@@ -31,12 +31,15 @@ Usage:
   python train.py
 """
 
+import argparse
+import csv
 import os
 import sys
 import re
 import json
 import time
 import subprocess
+from pathlib import Path
 
 import requests as req
 from openai import OpenAI
@@ -298,7 +301,69 @@ def print_summary(all_results: dict[str, list[dict]]) -> None:
     print("=" * 60)
 
 
+def write_csv(all_results: dict[str, list[dict]], path: str) -> None:
+    """Write (task, rep, score, breakdown_json) rows to a CSV file."""
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["task_id", "rep", "score", "breakdown_json", "feedback"])
+        writer.writeheader()
+        for task_id, results in all_results.items():
+            for ep in results:
+                writer.writerow({
+                    "task_id":        task_id,
+                    "rep":            ep["rep"],
+                    "score":          round(ep["reward"], 4),
+                    "breakdown_json": json.dumps(ep.get("breakdown", {})),
+                    "feedback":       ep.get("feedback", ""),
+                })
+    print(f"\n  [CSV] Metrics written to: {path}")
+
+
+def write_training_results_md(all_results: dict[str, list[dict]], model: str, path: str) -> None:
+    """Write a TRAINING_RESULTS.md with before/after reward table."""
+    lines: list[str] = [
+        "# Training Results\n",
+        f"Model: `{model}`  |  Reps per task: {REPS_PER_TASK}\n",
+        "",
+        "## Before/After Reward Table",
+        "",
+        "| Task | First Score | Last Score | Δ | Trend |",
+        "|------|-------------|------------|---|-------|",
+    ]
+    for task_id, results in all_results.items():
+        if not results:
+            continue
+        first  = results[0]["reward"]
+        latest = results[-1]["reward"]
+        delta  = latest - first
+        trend  = "▲ IMPROVED" if delta > 0.01 else "▼ REGRESSED" if delta < -0.01 else "≈ STABLE"
+        lines.append(f"| `{task_id}` | {first:.3f} | {latest:.3f} | {delta:+.3f} | {trend} |")
+
+    lines += [
+        "",
+        "## Attempt-by-Attempt Scores",
+        "",
+    ]
+    for task_id, results in all_results.items():
+        lines.append(f"### {task_id}")
+        lines.append("")
+        lines.append("| Attempt | Score |")
+        lines.append("|---------|-------|")
+        for ep in results:
+            lines.append(f"| {ep['rep']} | {ep['reward']:.3f} |")
+        lines.append("")
+
+    Path(path).write_text("\n".join(lines) + "\n")
+    print(f"  [MD] Training results written to: {path}")
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Medical Triage RL Training Loop")
+    parser.add_argument("--csv", metavar="PATH", default="",
+                        help="Write metrics CSV to this path (e.g. training_metrics.csv)")
+    parser.add_argument("--md", metavar="PATH", default="",
+                        help="Write TRAINING_RESULTS.md to this path")
+    args = parser.parse_args()
+
     missing = _validate_env()
     if missing:
         print("Missing required environment variables:")
@@ -307,7 +372,7 @@ def main() -> None:
         sys.exit(1)
 
     print("=" * 60)
-    print("  Medical Triage Environment v2.0 — RL Training Loop")
+    print("  Medical Triage Environment v2.1 — RL Training Loop")
     print(f"  Model:    {MODEL_NAME}")
     print(f"  API:      {API_BASE_URL}")
     print(f"  Tasks:    {len(TRAINING_TASKS)}  x  {REPS_PER_TASK} reps each")
@@ -344,6 +409,11 @@ def main() -> None:
         print()
 
     print_summary(all_results)
+
+    if args.csv:
+        write_csv(all_results, args.csv)
+    if args.md:
+        write_training_results_md(all_results, MODEL_NAME, args.md)
 
     if server_proc:
         server_proc.terminate()

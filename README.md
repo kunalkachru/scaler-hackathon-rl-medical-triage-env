@@ -20,8 +20,45 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **Live HF Space** | https://huggingface.co/spaces/kunalkachru23/medical-triage-env |
 | **API base URL** | https://kunalkachru23-medical-triage-env.hf.space |
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
-| **Version** | v2.0.0 |
-| **Tests** | 119 passing |
+| **Version** | v2.2.0 |
+| **Tasks** | 8 (63 cases) |
+| **Tests** | 167 passing |
+| **RL Dataset** | https://huggingface.co/datasets/kunalkachru23/medical-triage-triples |
+
+### Try it in 30 seconds (Evaluator quick path)
+
+1. Open the [live HF Space](https://huggingface.co/spaces/kunalkachru23/medical-triage-env) → click **"New Patient Case"** (any task)
+2. Click **"Auto-fill (AI Suggest)"** — the rule-based solver fills the form with a clinically correct response
+3. Click **"Submit"** — reward + breakdown scores appear instantly
+4. Switch to **Paediatric Triage** or **Medication Reconciliation** → repeat; observe the PEWS or drug-interaction reasoning
+5. Open **Training Progress** panel → run 5 episodes → watch the reward trend chart
+
+**Key API endpoints:**
+```bash
+curl https://kunalkachru23-medical-triage-env.hf.space/health
+# → {"status":"healthy","version":"2.2.0"}
+
+curl https://kunalkachru23-medical-triage-env.hf.space/tasks | jq 'keys'
+# → ["conflicting_vitals","demographic_fairness","deteriorating_patient",
+#    "masked_deterioration","medication_reconciliation","paediatric_triage",
+#    "sepsis_bundle","simple_triage"]
+
+# Compute NEWS2 from raw vitals
+curl -X POST https://kunalkachru23-medical-triage-env.hf.space/compute-news2 \
+  -H "Content-Type: application/json" \
+  -d '{"respiratory_rate":26,"spo2":93,"systolic_bp":88,"heart_rate":118,"temperature":38.6}'
+# → {"news2_total":9,"priority":"critical","breakdown":{...}}
+
+# Fairness check — per-demographic breakdown
+curl -X POST https://kunalkachru23-medical-triage-env.hf.space/grade-fairness \
+  -H "Content-Type: application/json" \
+  -d '{"group_id":"FP001","responses":{"FP001_white_male":{"priority":"high"},"FP001_black_male":{"priority":"high"}}}'
+# → {"score":0.9999,"per_demographic":[...],"bias_detected":false}
+
+# RL learning curve
+curl https://kunalkachru23-medical-triage-env.hf.space/learning-curve
+# → {"episodes":[...],"rolling_avg":[...],"window":10}
+```
 
 ### Demo (UI)
 
@@ -129,13 +166,19 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 
 **Why it's easy:** Vitals are unambiguous. A mechanistic NEWS2 calculation gives the correct answer. A simple LLM can do this.
 
-**4 cases:**
+**10 cases:**
 | Case | Patient | NEWS2 | Priority |
 |---|---|---|---|
 | ST001 | 72yo male, breathless, RR=24, SpO2=93% | 8 | High |
 | ST002 | 45yo female, routine pre-op, all normal | 0 | Low |
 | ST003 | 58yo male, chest pain, BP=88, HR=124 | 8 | Critical |
 | ST004 | 33yo female, mild fever, all otherwise normal | 1 | Low |
+| ST005 | 28yo female, anaphylaxis, BP=82/50, HR=136 | 10 | Critical |
+| ST006 | 68yo male, COPD exacerbation, RR=26, SpO2=87% | 7 | High |
+| ST007 | 79yo female, stroke, confusion, BP=185/110 | 3* | High |
+| ST008 | 55yo male, AKI, reduced urine output, confused | 4* | Medium |
+
+*Single-parameter flag: Consciousness=3 forces minimum "high" regardless of total.
 
 **Grader dimensions (total = 1.0):**
 - **0.40** — correct priority classification
@@ -151,13 +194,15 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 
 **Why it's medium:** Requires clinical reasoning beyond mechanical calculation. The agent must understand which sign is most dangerous *in context*, not just score each sign independently.
 
-**3 cases:**
+**5 cases:**
 
 | Case | Trap | True Danger |
 |---|---|---|
 | CV001 | HR=78 (normal), BP=130 (normal) | SpO2=88%, confused → silent hypoxia |
 | CV002 | "Anxiety history" | Tachycardia still needs ECG — can't dismiss |
 | CV003 | SpO2=96%, RR=20 (normal) | Consciousness=voice, Temp=39.2 → post-op sepsis |
+| CV004 | BP=115/75 (normal), SpO2=98% (normal) | RR=28 (Kussmaul breathing) → DKA, metabolic acidosis |
+| CV005 | SpO2=96% (normal despite massive PE) | BP=88/60, HR=128 → haemodynamic collapse from PE |
 
 **Grader dimensions (total = 1.0):**
 - **0.35** — correct priority
@@ -237,6 +282,26 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 - **T=60:** 0.4–0.6 — late catch (only reached if T=30 was wrong)
 - **Signal bonus:** up to +0.10 for identifying key deterioration signals in rationale
 
+### Task 6 — Sepsis Bundle Compliance (Hard)
+
+**What the agent must do:** Given a patient with confirmed/suspected sepsis, apply the Surviving Sepsis Campaign Hour-1 Bundle. Select the correct interventions, choose an appropriate antibiotic (respecting allergy history), specify fluid volume, and decide whether vasopressors are needed.
+
+**Why it's hard:** Requires integrating MAP, lactate, allergy history, and comorbidities simultaneously. Each case tests a distinct clinical pitfall — contraindicated antibiotics in penicillin allergy, conservative fluids in AKI, vasopressors for MAP <65.
+
+**4 cases:**
+| Case | Key Challenge | Antibiotic Constraint | Vasopressors |
+|---|---|---|---|
+| SB001 | Septic shock (MAP=60, lactate=4.8) | None — pip-taz ok | Required |
+| SB002 | Urosepsis, no shock (MAP=82) | None — ceftriaxone ok | Not required |
+| SB003 | Pneumonia + penicillin allergy | pip-taz/co-amoxiclav CONTRAINDICATED → use meropenem | Not required |
+| SB004 | Sepsis + severe AKI (creatinine=450) | None | Required; fluid 500ml only |
+
+**Grader dimensions (total = 1.0):**
+- **0.50** — bundle element completeness (fraction of required elements selected)
+- **0.25** — antibiotic appropriateness (0.0 for contraindicated, 1.0 for accepted)
+- **0.15** — fluid volume accuracy (±250ml of target = 1.0, ±500ml = 0.5)
+- **0.10** — vasopressor decision (correct boolean = 1.0)
+
 ---
 
 ## Action Space
@@ -262,6 +327,12 @@ class TriageAction(BaseModel):
 
     # Task 5
     action: Optional[str]                  # "monitor" | "escalate" | "emergency_response"
+
+    # Task 6 — Sepsis Bundle
+    bundle_elements: Optional[list[str]]   # subset of ["blood_cultures","broad_spectrum_antibiotics","iv_fluid_bolus","lactate_measurement","vasopressors"]
+    fluid_volume_ml: Optional[int]         # IV fluid bolus in ml (standard 30ml/kg ≈ 2000ml; 500ml if severe AKI)
+    antibiotic_choice: Optional[str]       # e.g. "piperacillin_tazobactam", "meropenem", "ceftriaxone"
+    vasopressor_indicated: Optional[bool]  # True if MAP <65 despite fluids
 
     # Optional for all
     rationale: Optional[str]               # free-text clinical reasoning
@@ -313,6 +384,12 @@ Task 3 (Masked Deterioration):
   masking_mechanism .. 0.25 (drug/condition name match)
   masked_sign ........ 0.25 (which vital is suppressed)
   critical_clues ..... 0.20 (fraction of non-standard evidence used)
+
+Task 6 (Sepsis Bundle):
+  bundle_completeness  0.50 (fraction of required elements; −0.05 per spurious element)
+  antibiotic ......... 0.25 (accepted=1.0, contraindicated=0.0, unknown broad-spectrum=0.5)
+  fluid_volume ....... 0.15 (±250ml=1.0, ±500ml=0.5, ±1000ml=0.25, far off=0.0)
+  vasopressor ........ 0.10 (correct boolean = 1.0, wrong = 0.0)
 ```
 
 **Penalty:** Empty or null response → no partial credit internally; on the wire, **`reward` / `score`** use the API open-interval floor (~`1e-4`), not `0.0`.  
@@ -342,7 +419,7 @@ Task 3 (Masked Deterioration):
 ## Running Tests
 
 ```bash
-# Full suite (119 tests)
+# Full suite (152 tests)
 venv/bin/python -m pytest tests/ -v
 
 # By module
@@ -354,7 +431,7 @@ venv/bin/python -m pytest tests/test_ui_contract.py -v      # 8 UI contract test
 venv/bin/python -m pytest tests/test_inference_contract.py -v  # 3 baseline inference contract tests
 ```
 
-**Current status:** 119 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status:** 152 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 
@@ -461,7 +538,7 @@ python inference.py
 
 The script:
 1. Starts the FastAPI server as a subprocess on port 8000
-2. Runs the LLM agent against 2 cases per task (10 total, 5 tasks)
+2. Runs the LLM agent against 2 cases per task (16 total, 8 tasks)
 3. Scores each response using deterministic graders
 4. Emits organizer-mandated structured logs per episode:
    - `[START] task=<...> env=<...> model=<...>`
@@ -653,7 +730,7 @@ medical-triage-env/
 ├── server/
 │   ├── app.py                ← FastAPI server — all endpoints + session manager + episode history
 │   ├── medical_triage_environment.py  ← Core environment state machine (reset/step/state)
-│   ├── cases.py              ← Patient case bank (28 cases across 5 tasks)
+│   ├── cases.py              ← Patient case bank (63 cases across 8 tasks)
 │   ├── graders.py            ← Deterministic graders: NEWS2, fairness, deterioration
 │   ├── requirements.txt      ← Server dependencies (fastapi, uvicorn, pydantic, openai)
 │   └── __init__.py
@@ -761,4 +838,4 @@ For judges and evaluators:
 1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/medical-triage-env and click through the web UI
 2. **API smoke test** — `curl https://kunalkachru23-medical-triage-env.hf.space/health`
 3. **Full runbook** — [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md) (setup, all endpoints, UI test plan, quickstart)
-4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (119 tests, case-wise grader validation)
+4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (152 tests, case-wise grader validation)

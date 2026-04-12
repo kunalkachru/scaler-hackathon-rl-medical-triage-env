@@ -239,6 +239,15 @@ step() {
   echo "============================================================"
 }
 
+# Auto-source .env if present (so HF_TOKEN etc. are visible to sub-commands)
+if [[ -f ".env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  source .env
+  set +a
+  echo "[release-gate] Sourced .env"
+fi
+
 require_cmd python "Install Python and activate project venv first."
 require_cmd pytest "Install test dependencies in your active venv."
 require_cmd openenv "Install OpenEnv CLI in your active venv."

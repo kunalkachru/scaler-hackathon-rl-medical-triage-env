@@ -22,10 +22,18 @@ from server.graders import (
     grade_simple_triage,
     grade_conflicting_vitals,
     grade_masked_deterioration,
+    grade_sepsis_bundle,
+    grade_paediatric_triage,
+    grade_medication_reconciliation,
     grade_response,
     grade_response_raw,
+    _normalize_vital_sign,
+    _normalize_condition,
 )
-from server.cases import SIMPLE_TRIAGE_CASES, CONFLICTING_VITALS_CASES, MASKED_DETERIORATION_CASES
+from server.cases import (
+    SIMPLE_TRIAGE_CASES, CONFLICTING_VITALS_CASES, MASKED_DETERIORATION_CASES,
+    SEPSIS_BUNDLE_CASES, PAEDIATRIC_TRIAGE_CASES, MEDICATION_RECONCILIATION_CASES,
+)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -444,5 +452,661 @@ class TestGradeDispatch:
                         f"{task_id}/{case['case_id']}: score {score} out of (0,1)"
 
 
+# ─────────────────────────────────────────────────────────────
+# SYNONYM NORMALIZATION TESTS
+# Verify that clinically equivalent agent answers are accepted.
+# All tests must be purely additive — existing golden tests unchanged.
+# ─────────────────────────────────────────────────────────────
+
+class TestSynonymNormalization:
+    """Unit tests for _normalize_vital_sign and _normalize_condition."""
+
+    def test_vital_sign_exact_passthrough(self):
+        """Canonical names pass through unchanged."""
+        assert _normalize_vital_sign("respiratory_rate") == "respiratory_rate"
+        assert _normalize_vital_sign("heart_rate") == "heart_rate"
+        assert _normalize_vital_sign("spo2") == "spo2"
+        assert _normalize_vital_sign("systolic_bp") == "systolic_bp"
+        assert _normalize_vital_sign("temperature") == "temperature"
+        assert _normalize_vital_sign("consciousness") == "consciousness"
+
+    def test_vital_sign_common_synonyms(self):
+        """Common LLM synonym outputs normalise to canonical form."""
+        assert _normalize_vital_sign("tachycardia") == "heart_rate"
+        assert _normalize_vital_sign("bradycardia") == "heart_rate"
+        assert _normalize_vital_sign("hr") == "heart_rate"
+        assert _normalize_vital_sign("heart rate") == "heart_rate"
+        assert _normalize_vital_sign("oxygen saturation") == "spo2"
+        assert _normalize_vital_sign("o2 sat") == "spo2"
+        assert _normalize_vital_sign("pulse ox") == "spo2"
+        assert _normalize_vital_sign("respiratory rate") == "respiratory_rate"
+        assert _normalize_vital_sign("rr") == "respiratory_rate"
+        assert _normalize_vital_sign("resp rate") == "respiratory_rate"
+        assert _normalize_vital_sign("blood pressure") == "systolic_bp"
+        assert _normalize_vital_sign("bp") == "systolic_bp"
+        assert _normalize_vital_sign("hypotension") == "systolic_bp"
+        assert _normalize_vital_sign("fever") == "temperature"
+        assert _normalize_vital_sign("temp") == "temperature"
+        assert _normalize_vital_sign("confusion") == "consciousness"
+        assert _normalize_vital_sign("altered consciousness") == "consciousness"
+        assert _normalize_vital_sign("gcs") == "consciousness"
+
+    def test_vital_sign_case_insensitive(self):
+        """Normalization is case-insensitive."""
+        assert _normalize_vital_sign("TACHYCARDIA") == "heart_rate"
+        assert _normalize_vital_sign("Oxygen Saturation") == "spo2"
+        assert _normalize_vital_sign("Respiratory Rate") == "respiratory_rate"
+
+    def test_vital_sign_unknown_passthrough(self):
+        """Unknown strings pass through cleaned (no crash)."""
+        result = _normalize_vital_sign("some_unknown_sign")
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_condition_synonyms(self):
+        """Condition synonym normalization."""
+        assert _normalize_condition("sepsis") == "septic_shock"
+        assert _normalize_condition("septicaemia") == "septic_shock"
+        assert _normalize_condition("dka") == "diabetic_ketoacidosis"
+        assert _normalize_condition("diabetic ketoacidosis") == "diabetic_ketoacidosis"
+        assert _normalize_condition("pe") == "pulmonary_embolism"
+        assert _normalize_condition("pulmonary embolism") == "pulmonary_embolism"
+        assert _normalize_condition("stemi") == "silent_mi"
+        assert _normalize_condition("myocardial infarction") == "silent_mi"
+        assert _normalize_condition("hyperkalemia") == "hyperkalaemia"
+
+
+class TestSynonymInGraders:
+    """Integration tests: synonym normalisation applied in real grader calls."""
+
+    def test_simple_triage_synonym_critical_sign_rr(self):
+        """Agent says 'respiratory rate' (with space), GT is 'respiratory_rate' — must score full credit."""
+        case = SIMPLE_TRIAGE_CASES[0]  # ST001: critical_sign = respiratory_rate
+        response = {
+            "priority": case["expected_priority"],
+            "news2_score": case["news2_score"],
+            "critical_sign": "respiratory rate",   # synonym: space instead of underscore
+            "recommended_action": case["ground_truth"]["recommended_action"],
+        }
+        score, breakdown = grade_simple_triage(response, case)
+        assert breakdown["critical_sign"] == round(1.0 * 0.20, 3), \
+            f"Expected full critical_sign credit for synonym 'respiratory rate', got {breakdown['critical_sign']}"
+
+    def test_simple_triage_synonym_critical_sign_tachycardia(self):
+        """Agent says 'tachycardia', GT is 'heart_rate' — must score full credit."""
+        # Use a synthetic minimal case dict to test the synonym directly.
+        synthetic_case = {
+            "case_id": "SYN001",
+            "task_id": "simple_triage",
+            "expected_priority": "high",
+            "news2_score": 6,
+            "ground_truth": {
+                "priority": "high",
+                "news2_score": 6,
+                "critical_sign": "heart_rate",
+                "recommended_action": "urgent_review",
+            },
+        }
+        response = {
+            "priority": "high",
+            "news2_score": 6,
+            "critical_sign": "tachycardia",      # synonym for heart_rate
+            "recommended_action": "urgent_review",
+        }
+        _, breakdown = grade_simple_triage(response, synthetic_case)
+        assert breakdown["critical_sign"] == round(1.0 * 0.20, 3), \
+            f"Expected full credit for 'tachycardia' synonym, got {breakdown['critical_sign']}"
+
+    def test_simple_triage_synonym_critical_sign_bp(self):
+        """Agent says 'blood pressure' or 'hypotension', GT is 'systolic_bp' — full credit."""
+        bp_case = next(c for c in SIMPLE_TRIAGE_CASES if c["ground_truth"]["critical_sign"] == "systolic_bp")
+        for synonym in ["blood pressure", "hypotension", "bp"]:
+            response = {
+                "priority": bp_case["expected_priority"],
+                "news2_score": bp_case["news2_score"],
+                "critical_sign": synonym,
+                "recommended_action": bp_case["ground_truth"]["recommended_action"],
+            }
+            _, breakdown = grade_simple_triage(response, bp_case)
+            assert breakdown["critical_sign"] == round(1.0 * 0.20, 3), \
+                f"Synonym '{synonym}' should give full credit, got {breakdown['critical_sign']}"
+
+    def test_conflicting_vitals_synonym_misleading_signs(self):
+        """Agent says ['tachycardia', 'blood pressure'], GT is ['heart_rate', 'systolic_bp'] — full misleading credit."""
+        case = CONFLICTING_VITALS_CASES[0]  # CV001: misleading_signs = [heart_rate, systolic_bp]
+        gt_misleading = case["ground_truth"].get("misleading_signs", [])
+        if "heart_rate" not in gt_misleading and "systolic_bp" not in gt_misleading:
+            pytest.skip("CV001 misleading_signs don't include heart_rate/systolic_bp")
+        response = {
+            "priority": case["expected_priority"],
+            "critical_sign": case["ground_truth"]["critical_sign"],
+            "misleading_signs": ["tachycardia", "blood pressure"],  # synonyms
+            "recommended_action": case["ground_truth"]["recommended_action"],
+            "rationale": "The SpO2 is critically low despite normal heart rate and blood pressure.",
+        }
+        _, breakdown = grade_conflicting_vitals(response, case)
+        assert breakdown["misleading_signs"] == round(1.0 * 0.20, 3), \
+            f"Synonym misleading_signs should score full credit, got {breakdown['misleading_signs']}"
+
+    def test_conflicting_vitals_synonym_critical_sign(self):
+        """Agent uses synonym for critical_sign in conflicting vitals — must get credit, not fall for trap."""
+        case = CONFLICTING_VITALS_CASES[0]  # CV001: critical_sign = spo2
+        response = {
+            "priority": case["expected_priority"],
+            "critical_sign": "oxygen saturation",  # synonym for spo2
+            "misleading_signs": case["ground_truth"].get("misleading_signs", []),
+            "recommended_action": case["ground_truth"]["recommended_action"],
+            "rationale": "oxygen saturation is critically low",
+        }
+        _, breakdown = grade_conflicting_vitals(response, case)
+        assert breakdown["critical_sign"] == round(1.0 * 0.25, 3), \
+            f"Synonym 'oxygen saturation' for spo2 should score full credit, got {breakdown['critical_sign']}"
+
+    def test_masked_deterioration_synonym_masked_sign(self):
+        """Agent says 'heart rate' (with space), GT is 'heart_rate' — full credit."""
+        case = MASKED_DETERIORATION_CASES[0]  # MD001: masked_sign = heart_rate
+        if case["ground_truth"]["masked_sign"] != "heart_rate":
+            pytest.skip("MD001 masked_sign is not heart_rate")
+        response = {
+            "priority": "critical",
+            "masking_drug_or_condition": case["ground_truth"].get("masking_drug", "bisoprolol"),
+            "masked_sign": "heart rate",  # synonym for heart_rate
+            "critical_clues": case["ground_truth"].get("critical_clues", []),
+            "recommended_action": "emergency_response",
+        }
+        _, breakdown = grade_masked_deterioration(response, case)
+        assert breakdown["masked_sign"] == round(1.0 * 0.25, 3), \
+            f"Synonym 'heart rate' for heart_rate should score full, got {breakdown['masked_sign']}"
+
+    def test_existing_exact_matches_unchanged(self):
+        """Existing exact-match golden tests still score the same after normalization."""
+        case = SIMPLE_TRIAGE_CASES[0]
+        gt = case["ground_truth"]
+        perfect = {
+            "priority": case["expected_priority"],
+            "news2_score": case["news2_score"],
+            "critical_sign": gt["critical_sign"],         # exact canonical string
+            "recommended_action": gt["recommended_action"],
+        }
+        score, _ = grade_simple_triage(perfect, case)
+        assert score >= 0.90, f"Perfect exact response should still score ≥0.90, got {score}"
+
+
+# ─────────────────────────────────────────────────────────────
+# NEW CASE TESTS (ST005–ST008, CV004–CV005)
+# One perfect-response test per new case to confirm grader works.
+# ─────────────────────────────────────────────────────────────
+
+class TestNewSimpleTriageCases:
+    """Verify the 4 new simple_triage cases grade correctly with perfect responses."""
+
+    def test_st005_anaphylaxis_perfect(self):
+        """ST005 — Anaphylaxis: critical, systolic_bp, emergency_response."""
+        from server.cases import SIMPLE_TRIAGE_CASES
+        case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST005")
+        response = {
+            "priority": "critical",
+            "news2_score": 10,
+            "critical_sign": "systolic_bp",
+            "recommended_action": "emergency_response",
+        }
+        score, breakdown = grade_simple_triage(response, case)
+        assert score >= 0.90, f"ST005 perfect response should score ≥0.90, got {score}"
+        assert breakdown["priority"] == round(1.0 * 0.40, 3)
+        assert breakdown["critical_sign"] == round(1.0 * 0.20, 3)
+
+    def test_st005_anaphylaxis_synonym_bp(self):
+        """ST005 — Synonym 'hypotension' for systolic_bp gets full critical_sign credit."""
+        from server.cases import SIMPLE_TRIAGE_CASES
+        case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST005")
+        response = {
+            "priority": "critical",
+            "news2_score": 10,
+            "critical_sign": "hypotension",
+            "recommended_action": "emergency_response",
+        }
+        _, breakdown = grade_simple_triage(response, case)
+        assert breakdown["critical_sign"] == round(1.0 * 0.20, 3), \
+            f"'hypotension' synonym should score full credit, got {breakdown['critical_sign']}"
+
+    def test_st006_copd_perfect(self):
+        """ST006 — COPD exacerbation: high, respiratory_rate, urgent_review."""
+        from server.cases import SIMPLE_TRIAGE_CASES
+        case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST006")
+        response = {
+            "priority": "high",
+            "news2_score": 7,
+            "critical_sign": "respiratory_rate",
+            "recommended_action": "urgent_review",
+        }
+        score, breakdown = grade_simple_triage(response, case)
+        assert score >= 0.90, f"ST006 perfect response should score ≥0.90, got {score}"
+        assert breakdown["priority"] == round(1.0 * 0.40, 3)
+        assert breakdown["critical_sign"] == round(1.0 * 0.20, 3)
+
+    def test_st007_stroke_perfect(self):
+        """ST007 — Stroke: high, consciousness, emergency_response."""
+        from server.cases import SIMPLE_TRIAGE_CASES
+        case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST007")
+        response = {
+            "priority": "high",
+            "news2_score": 3,
+            "critical_sign": "consciousness",
+            "recommended_action": "emergency_response",
+        }
+        score, breakdown = grade_simple_triage(response, case)
+        assert score >= 0.90, f"ST007 perfect response should score ≥0.90, got {score}"
+        assert breakdown["priority"] == round(1.0 * 0.40, 3)
+        assert breakdown["critical_sign"] == round(1.0 * 0.20, 3)
+
+    def test_st007_stroke_synonym_consciousness(self):
+        """ST007 — Synonym 'confusion' for consciousness gets full critical_sign credit."""
+        from server.cases import SIMPLE_TRIAGE_CASES
+        case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST007")
+        response = {
+            "priority": "high",
+            "news2_score": 3,
+            "critical_sign": "confusion",
+            "recommended_action": "emergency_response",
+        }
+        _, breakdown = grade_simple_triage(response, case)
+        assert breakdown["critical_sign"] == round(1.0 * 0.20, 3), \
+            f"'confusion' synonym should score full credit, got {breakdown['critical_sign']}"
+
+    def test_st008_aki_perfect(self):
+        """ST008 — AKI: medium, consciousness, urgent_review."""
+        from server.cases import SIMPLE_TRIAGE_CASES
+        case = next(c for c in SIMPLE_TRIAGE_CASES if c["case_id"] == "ST008")
+        response = {
+            "priority": "medium",
+            "news2_score": 4,
+            "critical_sign": "consciousness",
+            "recommended_action": "urgent_review",
+        }
+        score, breakdown = grade_simple_triage(response, case)
+        assert score >= 0.90, f"ST008 perfect response should score ≥0.90, got {score}"
+
+    def test_new_cases_news2_match_computed(self):
+        """All new ST cases: stored news2_score must match compute_news2()."""
+        from server.cases import SIMPLE_TRIAGE_CASES
+        from server.graders import compute_news2
+        new_cases = [c for c in SIMPLE_TRIAGE_CASES if c["case_id"] in ("ST005", "ST006", "ST007", "ST008")]
+        for case in new_cases:
+            computed, _ = compute_news2(case["vitals"])
+            assert computed == case["news2_score"], \
+                f"{case['case_id']}: stored={case['news2_score']} computed={computed}"
+
+
+class TestNewConflictingVitalsCases:
+    """Verify the 2 new conflicting_vitals cases grade correctly with perfect responses."""
+
+    def test_cv004_dka_perfect(self):
+        """CV004 — DKA: high, respiratory_rate, misleading=[systolic_bp, spo2]."""
+        case = next(c for c in CONFLICTING_VITALS_CASES if c["case_id"] == "CV004")
+        response = {
+            "priority": "high",
+            "critical_sign": "respiratory_rate",
+            "misleading_signs": ["systolic_bp", "spo2"],
+            "recommended_action": "urgent_review",
+            "rationale": "Kussmaul breathing with RR=28 is the critical sign indicating diabetic ketoacidosis metabolic acidosis compensation.",
+        }
+        score, breakdown = grade_conflicting_vitals(response, case)
+        assert score >= 0.80, f"CV004 perfect response should score ≥0.80, got {score}"
+        assert breakdown["critical_sign"] == round(1.0 * 0.25, 3)
+        assert breakdown["misleading_signs"] == round(1.0 * 0.20, 3)
+
+    def test_cv004_dka_synonym_rr(self):
+        """CV004 — Synonym 'respiratory rate' (space) for respiratory_rate — full credit."""
+        case = next(c for c in CONFLICTING_VITALS_CASES if c["case_id"] == "CV004")
+        response = {
+            "priority": "high",
+            "critical_sign": "respiratory rate",
+            "misleading_signs": ["blood pressure", "oxygen saturation"],
+            "recommended_action": "urgent_review",
+            "rationale": "Kussmaul breathing indicates metabolic acidosis from DKA.",
+        }
+        _, breakdown = grade_conflicting_vitals(response, case)
+        assert breakdown["critical_sign"] == round(1.0 * 0.25, 3), \
+            f"'respiratory rate' synonym should score full, got {breakdown['critical_sign']}"
+        assert breakdown["misleading_signs"] == round(1.0 * 0.20, 3), \
+            f"Synonym misleading_signs should score full, got {breakdown['misleading_signs']}"
+
+    def test_cv005_pe_perfect(self):
+        """CV005 — PE: critical, systolic_bp, misleading=[spo2], emergency_response."""
+        case = next(c for c in CONFLICTING_VITALS_CASES if c["case_id"] == "CV005")
+        response = {
+            "priority": "critical",
+            "critical_sign": "systolic_bp",
+            "misleading_signs": ["spo2"],
+            "recommended_action": "emergency_response",
+            "rationale": "Massive PE with haemodynamic compromise: hypotension and tachycardia despite normal SpO2.",
+        }
+        score, breakdown = grade_conflicting_vitals(response, case)
+        assert score >= 0.80, f"CV005 perfect response should score ≥0.80, got {score}"
+        assert breakdown["critical_sign"] == round(1.0 * 0.25, 3)
+        assert breakdown["misleading_signs"] == round(1.0 * 0.20, 3)
+
+    def test_cv005_pe_trap_spo2(self):
+        """CV005 — Agent falls for SpO2 trap (says spo2 is critical) → zero on critical_sign."""
+        case = next(c for c in CONFLICTING_VITALS_CASES if c["case_id"] == "CV005")
+        response = {
+            "priority": "critical",
+            "critical_sign": "spo2",          # wrong — SpO2=96% is the misleading sign
+            "misleading_signs": [],
+            "recommended_action": "emergency_response",
+            "rationale": "SpO2 seems slightly low.",
+        }
+        _, breakdown = grade_conflicting_vitals(response, case)
+        assert breakdown["critical_sign"] == 0.0, \
+            f"Falling for spo2 trap should score 0, got {breakdown['critical_sign']}"
+
+    def test_new_cv_cases_news2_match_computed(self):
+        """CV004 and CV005: stored news2_score must match compute_news2()."""
+        from server.graders import compute_news2
+        new_cases = [c for c in CONFLICTING_VITALS_CASES if c["case_id"] in ("CV004", "CV005")]
+        for case in new_cases:
+            computed, _ = compute_news2(case["vitals"])
+            assert computed == case["news2_score"], \
+                f"{case['case_id']}: stored={case['news2_score']} computed={computed}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSepsisBundleGrader:
+    """Tests for grade_sepsis_bundle — Hour-1 Sepsis Bundle compliance."""
+
+    def test_sb001_perfect_response(self):
+        """SB001 — Septic shock: perfect bundle including vasopressors and 2000ml."""
+        case = next(c for c in SEPSIS_BUNDLE_CASES if c["case_id"] == "SB001")
+        response = {
+            "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement", "vasopressors"],
+            "antibiotic_choice": "piperacillin_tazobactam",
+            "fluid_volume_ml": 2000,
+            "vasopressor_indicated": True,
+            "rationale": "Septic shock: MAP=60 <65, lactate=4.8 >4. Full bundle + vasopressors. 30ml/kg=~2000ml. Pip-taz for CAP.",
+        }
+        score, breakdown = grade_sepsis_bundle(response, case)
+        assert score >= 0.85, f"SB001 perfect response should score ≥0.85, got {score}"
+        assert breakdown["_ab_verdict"] == "correct"
+        assert breakdown["_vasopr_verdict"] == "correct"
+        assert breakdown["_fluid_verdict"] == "correct"
+
+    def test_sb001_missing_vasopressors(self):
+        """SB001 — Agent misses vasopressors in shock → bundle completeness penalty + vasopressor penalty."""
+        case = next(c for c in SEPSIS_BUNDLE_CASES if c["case_id"] == "SB001")
+        response = {
+            "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement"],
+            "antibiotic_choice": "piperacillin_tazobactam",
+            "fluid_volume_ml": 2000,
+            "vasopressor_indicated": False,  # wrong — shock is present
+            "rationale": "Sepsis with standard bundle.",
+        }
+        score, breakdown = grade_sepsis_bundle(response, case)
+        # Missing vasopressors in bundle + wrong vasopressor_indicated = significant penalty
+        assert score <= 0.80, f"Missing vasopressors in shock should lower score, got {score}"
+        assert breakdown["_vasopr_verdict"] == "wrong"
+
+    def test_sb002_no_vasopressors_correct(self):
+        """SB002 — Urosepsis without shock: vasopressors NOT required, correct bundle."""
+        case = next(c for c in SEPSIS_BUNDLE_CASES if c["case_id"] == "SB002")
+        response = {
+            "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement"],
+            "antibiotic_choice": "ceftriaxone",
+            "fluid_volume_ml": 500,
+            "vasopressor_indicated": False,
+            "rationale": "Sepsis no shock: MAP=82 >65. No vasopressors. Ceftriaxone for UTI source.",
+        }
+        score, breakdown = grade_sepsis_bundle(response, case)
+        assert score >= 0.85, f"SB002 perfect no-vasopressor response should score ≥0.85, got {score}"
+        assert breakdown["_vasopr_verdict"] == "correct"
+        assert breakdown["_ab_verdict"] == "correct"
+
+    def test_sb003_contraindicated_antibiotic(self):
+        """SB003 — Penicillin allergy: pip-taz is contraindicated → zero antibiotic score."""
+        case = next(c for c in SEPSIS_BUNDLE_CASES if c["case_id"] == "SB003")
+        response = {
+            "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement"],
+            "antibiotic_choice": "piperacillin_tazobactam",  # CONTRAINDICATED
+            "fluid_volume_ml": 1500,
+            "vasopressor_indicated": False,
+            "rationale": "Standard sepsis bundle with pip-taz.",
+        }
+        score, breakdown = grade_sepsis_bundle(response, case)
+        assert breakdown["_ab_verdict"] == "contraindicated", \
+            f"Pip-taz in penicillin allergy should be contraindicated, got {breakdown['_ab_verdict']}"
+        assert breakdown["antibiotic"] == 0.0, \
+            f"Contraindicated antibiotic should score 0, got {breakdown['antibiotic']}"
+
+    def test_sb003_correct_allergy_safe_antibiotic(self):
+        """SB003 — Penicillin allergy: meropenem is correct alternative."""
+        case = next(c for c in SEPSIS_BUNDLE_CASES if c["case_id"] == "SB003")
+        response = {
+            "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement"],
+            "antibiotic_choice": "meropenem",
+            "fluid_volume_ml": 1500,
+            "vasopressor_indicated": False,
+            "rationale": "Penicillin allergy — using meropenem. MAP=72 >65 no vasopressors.",
+        }
+        score, breakdown = grade_sepsis_bundle(response, case)
+        assert score >= 0.85, f"SB003 meropenem response should score ≥0.85, got {score}"
+        assert breakdown["_ab_verdict"] == "correct"
+
+    def test_sb004_aki_conservative_fluid(self):
+        """SB004 — Sepsis + severe AKI: 500ml only (conservative). 2000ml should penalise."""
+        case = next(c for c in SEPSIS_BUNDLE_CASES if c["case_id"] == "SB004")
+        response_correct = {
+            "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement", "vasopressors"],
+            "antibiotic_choice": "piperacillin_tazobactam",
+            "fluid_volume_ml": 500,
+            "vasopressor_indicated": True,
+            "rationale": "Severe AKI — conservative 500ml only. MAP <70 needs vasopressors.",
+        }
+        response_wrong_fluid = dict(response_correct, fluid_volume_ml=2000)
+        score_correct, bd_correct = grade_sepsis_bundle(response_correct, case)
+        score_wrong, bd_wrong = grade_sepsis_bundle(response_wrong_fluid, case)
+        assert score_correct > score_wrong, \
+            f"Conservative fluid (500ml) should score higher than standard (2000ml) in AKI: {score_correct} vs {score_wrong}"
+        assert bd_correct["_fluid_verdict"] == "correct"
+        assert bd_wrong["_fluid_verdict"] in ("off", "far_off")
+
+    def test_sb001_alias_antibiotic(self):
+        """SB001 — 'tazocin' is alias for piperacillin_tazobactam → accepted."""
+        case = next(c for c in SEPSIS_BUNDLE_CASES if c["case_id"] == "SB001")
+        response = {
+            "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement", "vasopressors"],
+            "antibiotic_choice": "tazocin",  # alias
+            "fluid_volume_ml": 2000,
+            "vasopressor_indicated": True,
+        }
+        _, breakdown = grade_sepsis_bundle(response, case)
+        assert breakdown["_ab_verdict"] == "correct", \
+            f"'tazocin' alias should be accepted, got {breakdown['_ab_verdict']}"
+
+    def test_missing_all_fields(self):
+        """Empty response should score near zero but not crash."""
+        case = SEPSIS_BUNDLE_CASES[0]
+        score, breakdown = grade_sepsis_bundle({}, case)
+        assert score < 0.15, f"Empty response should score near 0, got {score}"
+        assert "feedback" in breakdown
+
+    def test_grade_response_raw_dispatch(self):
+        """grade_response_raw dispatches to grade_sepsis_bundle for 'sepsis_bundle' task_id."""
+        case = SEPSIS_BUNDLE_CASES[0]
+        score, breakdown = grade_response_raw("sepsis_bundle", {}, case)
+        assert isinstance(score, float)
+        assert score < 0.15
+
+
+# ─────────────────────────────────────────────────────────────
+# PAEDIATRIC TRIAGE GRADER TESTS
+# ─────────────────────────────────────────────────────────────
+
+class TestPaediatricTriageGrader:
+    """Tests for grade_paediatric_triage — PEWS-based paediatric scoring."""
+
+    def test_pd001_perfect_response(self):
+        """PD001 — Infant bronchiolitis: perfect response scores ≥0.85."""
+        case = next(c for c in PAEDIATRIC_TRIAGE_CASES if c["case_id"] == "PD001")
+        response = {
+            "priority": "high",
+            "age_group": "infant",
+            "pews_score": 5,
+            "critical_sign": "spo2",
+            "recommended_action": "urgent_review",
+            "rationale": "SpO2=87% in 4-month-old is critically low. PEWS=5 → urgent review.",
+        }
+        score, breakdown = grade_paediatric_triage(response, case)
+        assert score >= 0.85, f"PD001 perfect response should score ≥0.85, got {score}"
+
+    def test_pd003_critical_dka_perfect(self):
+        """PD003 — School-age DKA: critical priority + emergency_response scores ≥0.85."""
+        case = next(c for c in PAEDIATRIC_TRIAGE_CASES if c["case_id"] == "PD003")
+        response = {
+            "priority": "critical",
+            "age_group": "school_age",
+            "pews_score": 7,
+            "critical_sign": "respiratory_rate",
+            "recommended_action": "emergency_response",
+        }
+        score, breakdown = grade_paediatric_triage(response, case)
+        assert score >= 0.85, f"PD003 perfect response should score ≥0.85, got {score}"
+
+    def test_priority_partial_credit(self):
+        """Adjacent priority gets partial credit (e.g. medium instead of high)."""
+        case = next(c for c in PAEDIATRIC_TRIAGE_CASES if c["case_id"] == "PD001")
+        response = {"priority": "medium", "age_group": "infant",
+                    "critical_sign": "spo2", "recommended_action": "urgent_review"}
+        score, breakdown = grade_paediatric_triage(response, case)
+        # Should not be full score but not zero either
+        assert 0.3 < score < 0.9, f"Adjacent priority should give partial credit, got {score}"
+
+    def test_wrong_age_group_loses_points(self):
+        """Wrong age group loses 0.25 weight."""
+        case = next(c for c in PAEDIATRIC_TRIAGE_CASES if c["case_id"] == "PD001")
+        response_correct = {"priority": "high", "age_group": "infant",
+                            "critical_sign": "spo2", "recommended_action": "urgent_review"}
+        response_wrong = {"priority": "high", "age_group": "school_age",
+                          "critical_sign": "spo2", "recommended_action": "urgent_review"}
+        score_correct, _ = grade_paediatric_triage(response_correct, case)
+        score_wrong, _ = grade_paediatric_triage(response_wrong, case)
+        assert score_correct > score_wrong + 0.2, "Wrong age group should cost ≥0.20 points"
+
+    def test_synonym_age_group_toddler(self):
+        """'toddler' synonym resolves correctly."""
+        case = next(c for c in PAEDIATRIC_TRIAGE_CASES if c["case_id"] == "PD002")
+        response = {"priority": "high", "age_group": "toddler",
+                    "critical_sign": "temperature", "recommended_action": "urgent_review"}
+        score, _ = grade_paediatric_triage(response, case)
+        assert score >= 0.85, f"PD002 toddler perfect response should score ≥0.85, got {score}"
+
+    def test_empty_response_scores_near_zero(self):
+        """Empty response scores near zero."""
+        case = PAEDIATRIC_TRIAGE_CASES[0]
+        score, breakdown = grade_paediatric_triage({}, case)
+        assert score < 0.15, f"Empty response should score near zero, got {score}"
+        assert "feedback" in breakdown
+
+    def test_dispatch_paediatric_triage(self):
+        """grade_response_raw dispatches to grade_paediatric_triage."""
+        case = PAEDIATRIC_TRIAGE_CASES[0]
+        score, breakdown = grade_response_raw("paediatric_triage", {}, case)
+        assert isinstance(score, float)
+        assert score < 0.15
+
+
+# ─────────────────────────────────────────────────────────────
+# MEDICATION RECONCILIATION GRADER TESTS
+# ─────────────────────────────────────────────────────────────
+
+class TestMedicationReconciliationGrader:
+    """Tests for grade_medication_reconciliation — drug safety scoring."""
+
+    def test_mr001_perfect_response(self):
+        """MR001 — Warfarin+NSAID: perfect response scores ≥0.85."""
+        case = next(c for c in MEDICATION_RECONCILIATION_CASES if c["case_id"] == "MR001")
+        response = {
+            "issues_found": ["warfarin_nsaid_interaction", "nsaid_potentiates_anticoagulation", "supratherapeutic_inr"],
+            "severity": "critical",
+            "requires_pharmacist": True,
+            "recommended_action": "withhold_drug",
+            "drug_to_withhold": "ibuprofen",
+            "rationale": "Ibuprofen+Warfarin: major GI bleed risk. INR=4.8 elevated. Withhold NSAID.",
+        }
+        score, breakdown = grade_medication_reconciliation(response, case)
+        assert score >= 0.85, f"MR001 perfect response should score ≥0.85, got {score}"
+
+    def test_mr002_aki_perfect(self):
+        """MR002 — AKI+NSAIDs: identifies all critical issues."""
+        case = next(c for c in MEDICATION_RECONCILIATION_CASES if c["case_id"] == "MR002")
+        response = {
+            "issues_found": ["nsaid_contraindicated_in_aki", "ace_inhibitor_caution_in_aki", "methotrexate_renally_cleared_toxicity_risk"],
+            "severity": "critical",
+            "requires_pharmacist": True,
+            "recommended_action": "withhold_drug",
+        }
+        score, breakdown = grade_medication_reconciliation(response, case)
+        assert score >= 0.85, f"MR002 perfect response should score ≥0.85, got {score}"
+
+    def test_partial_issues_gives_partial_credit(self):
+        """Identifying some but not all issues gives partial credit on issues dimension."""
+        case = next(c for c in MEDICATION_RECONCILIATION_CASES if c["case_id"] == "MR001")
+        response = {
+            "issues_found": ["warfarin_nsaid_interaction"],  # only 1 of 3
+            "severity": "critical",
+            "requires_pharmacist": True,
+            "recommended_action": "withhold_drug",
+        }
+        score, breakdown = grade_medication_reconciliation(response, case)
+        # Issues score = 1/3 * 0.40 = 0.133; rest correct = 0.60; total ~0.73
+        assert 0.3 < score < 0.85, f"Partial issues should give partial credit, got {score}"
+
+    def test_wrong_severity_loses_points(self):
+        """Wrong severity costs 0.30 weight."""
+        case = next(c for c in MEDICATION_RECONCILIATION_CASES if c["case_id"] == "MR001")
+        response_correct = {"issues_found": ["warfarin_nsaid_interaction", "nsaid_potentiates_anticoagulation", "supratherapeutic_inr"],
+                            "severity": "critical", "requires_pharmacist": True, "recommended_action": "withhold_drug"}
+        response_wrong   = {"issues_found": ["warfarin_nsaid_interaction", "nsaid_potentiates_anticoagulation", "supratherapeutic_inr"],
+                            "severity": "low", "requires_pharmacist": True, "recommended_action": "withhold_drug"}
+        score_correct, _ = grade_medication_reconciliation(response_correct, case)
+        score_wrong, _   = grade_medication_reconciliation(response_wrong, case)
+        assert score_correct > score_wrong + 0.25, "Wrong severity should cost ≥0.25 points"
+
+    def test_spurious_issues_penalised(self):
+        """Hallucinated issues get a small penalty."""
+        case = next(c for c in MEDICATION_RECONCILIATION_CASES if c["case_id"] == "MR001")
+        response_clean = {"issues_found": ["warfarin_nsaid_interaction", "nsaid_potentiates_anticoagulation", "supratherapeutic_inr"],
+                          "severity": "critical", "requires_pharmacist": True, "recommended_action": "withhold_drug"}
+        response_spurious = {"issues_found": ["warfarin_nsaid_interaction", "nsaid_potentiates_anticoagulation", "supratherapeutic_inr",
+                                              "hallucinated_issue_a", "hallucinated_issue_b", "hallucinated_issue_c"],
+                             "severity": "critical", "requires_pharmacist": True, "recommended_action": "withhold_drug"}
+        score_clean, _    = grade_medication_reconciliation(response_clean, case)
+        score_spurious, _ = grade_medication_reconciliation(response_spurious, case)
+        assert score_clean >= score_spurious, "Spurious issues should not improve score"
+
+    def test_empty_response_near_zero(self):
+        """Empty response scores near zero."""
+        case = MEDICATION_RECONCILIATION_CASES[0]
+        score, breakdown = grade_medication_reconciliation({}, case)
+        assert score < 0.15, f"Empty response should score near zero, got {score}"
+        assert "feedback" in breakdown
+
+    def test_mr003_modify_dose_action(self):
+        """MR003 — ACE+K+-sparing diuretic: recommended_action = modify_dose."""
+        case = next(c for c in MEDICATION_RECONCILIATION_CASES if c["case_id"] == "MR003")
+        response = {
+            "issues_found": ["ace_inhibitor_plus_potassium_sparing_diuretic_hyperkalaemia", "baseline_hyperkalaemia_risk", "ckd_reduces_potassium_excretion"],
+            "severity": "high",
+            "requires_pharmacist": True,
+            "recommended_action": "modify_dose",
+        }
+        score, breakdown = grade_medication_reconciliation(response, case)
+        assert score >= 0.85, f"MR003 perfect response should score ≥0.85, got {score}"
+
+    def test_dispatch_medication_reconciliation(self):
+        """grade_response_raw dispatches to grade_medication_reconciliation."""
+        case = MEDICATION_RECONCILIATION_CASES[0]
+        score, breakdown = grade_response_raw("medication_reconciliation", {}, case)
+        assert isinstance(score, float)
+        assert score < 0.15

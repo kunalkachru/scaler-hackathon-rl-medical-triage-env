@@ -431,9 +431,9 @@ class TestConfidenceCalibration:
     """
 
     def test_easy_case_correct_high_confidence_gets_bonus(self):
-        """NEWS2=0, correct answer, confidence=0.9 → max bonus (capped at 0.05)."""
+        """NEWS2=0, correct answer, confidence=0.9 → max bonus (capped at 0.10)."""
         bonus = grade_confidence_calibration(0.9, 0, True)
-        assert bonus == 0.05, f"Expected 0.05 (capped), got {bonus}"
+        assert bonus == 0.10, f"Expected 0.10 (capped), got {bonus}"
 
     def test_easy_case_correct_low_confidence_small_bonus(self):
         """Correct but oddly uncertain on easy case → smaller bonus."""
@@ -467,8 +467,8 @@ class TestConfidenceCalibration:
         """Values outside [0,1] should be clamped safely."""
         bonus1 = grade_confidence_calibration(1.5, 0, True)  # > 1.0
         bonus2 = grade_confidence_calibration(-0.5, 0, True)  # < 0.0
-        assert 0.0 <= bonus1 <= 0.05
-        assert 0.0 <= bonus2 <= 0.05
+        assert 0.0 <= bonus1 <= 0.10
+        assert 0.0 <= bonus2 <= 0.10
 
     def test_confidence_bonus_adds_to_total_score(self):
         """Confidence bonus should appear in score_breakdown and increase total reward."""
@@ -509,15 +509,18 @@ class TestAllFiveTasksIntegration:
     def test_all_tasks_listed_in_available_tasks(self):
         env = MedicalTriageEnvironment()
         r = env.reset()
-        assert len(r.observation.available_tasks) == 5
+        assert len(r.observation.available_tasks) == 8
 
     def test_case_counts(self):
         from server.cases import CASE_BANK
-        assert len(CASE_BANK["simple_triage"]) == 4
-        assert len(CASE_BANK["conflicting_vitals"]) == 3
-        assert len(CASE_BANK["masked_deterioration"]) == 5
+        assert len(CASE_BANK["simple_triage"]) == 10
+        assert len(CASE_BANK["conflicting_vitals"]) == 8
+        assert len(CASE_BANK["masked_deterioration"]) == 10
         assert len(CASE_BANK["demographic_fairness"]) == 12
-        assert len(CASE_BANK["deteriorating_patient"]) == 4
+        assert len(CASE_BANK["deteriorating_patient"]) == 7
+        assert len(CASE_BANK["sepsis_bundle"]) == 4
+        assert len(CASE_BANK["paediatric_triage"]) == 6
+        assert len(CASE_BANK["medication_reconciliation"]) == 6
 
     def test_score_always_in_range_all_tasks(self):
         """Critical invariant: all graders must return [0.0, 1.0]."""

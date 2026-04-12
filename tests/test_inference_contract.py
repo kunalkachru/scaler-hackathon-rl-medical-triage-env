@@ -60,7 +60,7 @@ def test_main_uses_server_url_for_case_lookup(monkeypatch, capsys):
 
     assert "[START]" in output
     assert "[END]" in output
-    assert len(captured_server_urls) == 10
+    assert len(captured_server_urls) == 16
     assert all(url == inference.SERVER_URL for url in captured_server_urls)
 
 

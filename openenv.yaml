@@ -15,16 +15,19 @@ tags:
   - bias-detection
 
 name: medical_triage_env
-version: "2.0.0"
+version: "2.2.0"
 description: >
   An OpenEnv RL environment for clinical triage. An AI agent reads patient cases
-  and performs triage using NHS NEWS2. Five tasks of increasing difficulty and
+  and performs triage using NHS NEWS2 and PEWS. Eight tasks of increasing difficulty and
   real-world clinical fidelity: simple triage, conflicting vitals, masked
   deterioration (pharmacological masking), demographic fairness (bias detection),
-  and deteriorating patient (multi-turn escalation). All graders are deterministic,
-  using peer-reviewed clinical protocols. Research-grounded: addresses documented
-  harms from Mount Sinai (1.7M LLM outputs), Oxford Medical School, Bordeaux
-  University Hospital, and MIMIC-III deterioration studies.
+  deteriorating patient (multi-turn escalation), sepsis bundle compliance
+  (Surviving Sepsis Campaign Hour-1 Bundle), paediatric triage (PEWS age-specific
+  thresholds), and medication reconciliation (drug interactions, dosing errors).
+  All graders are deterministic, using peer-reviewed clinical protocols.
+  Research-grounded: addresses documented harms from Mount Sinai (1.7M LLM outputs),
+  Oxford Medical School, Bordeaux University Hospital, MIMIC-III deterioration studies,
+  PRISM/SSC sepsis trials, and NPSA Safer Practice Notice 2006 (methotrexate dosing).
 
 author: "Team Falcons - Scaler Meta PyTorch Hackathon 2026"
 
@@ -32,17 +35,17 @@ tasks:
   - id: simple_triage
     name: Simple Triage Classification
     difficulty: easy
-    cases: 4
+    cases: 10
 
   - id: conflicting_vitals
     name: Conflicting Vitals Assessment
     difficulty: medium
-    cases: 3
+    cases: 8
 
   - id: masked_deterioration
     name: Masked Deterioration Detection
     difficulty: hard
-    cases: 5
+    cases: 10
 
   - id: demographic_fairness
     name: Demographic Fairness Evaluation
@@ -53,8 +56,26 @@ tasks:
   - id: deteriorating_patient
     name: Deteriorating Patient (Multi-Turn)
     difficulty: hard
-    cases: 4
+    cases: 7
     research: "MIMIC-III; npj Digital Medicine 2025; 70% preventable ED deaths post-assessment"
+
+  - id: sepsis_bundle
+    name: Sepsis Hour-1 Bundle Compliance
+    difficulty: hard
+    cases: 4
+    research: "Surviving Sepsis Campaign 2021 Guidelines; PRISM meta-analysis 3 million patients; ARISE PROCESS ProCESS trials"
+
+  - id: paediatric_triage
+    name: Paediatric Triage (PEWS)
+    difficulty: hard
+    cases: 6
+    research: "PEWS — Duncan 2006; RCPCH 2017 guidance; paediatric sepsis kills 1 in 14 children (RCPCH 2021)"
+
+  - id: medication_reconciliation
+    name: Medication Reconciliation
+    difficulty: hard
+    cases: 6
+    research: "NPSA Safer Practice Notice 2006 (methotrexate); BNF; BMJ 2005 warfarin-NSAID bleeding risk 3×; MHRA AKI alerts"
 
 endpoints:
   reset: POST /reset
@@ -64,8 +85,10 @@ endpoints:
   tasks: GET /tasks
   grade_fairness: POST /grade-fairness
   metrics: GET /metrics
+  compute_news2: POST /compute-news2
+  learning_curve: GET /learning-curve
 
 # Returned step/task scores are remapped to the open interval (0, 1); see models.task_score_for_api
 reward_range: [0.0001, 0.9999]
 max_steps_per_episode: 3
-total_cases: 28
+total_cases: 63

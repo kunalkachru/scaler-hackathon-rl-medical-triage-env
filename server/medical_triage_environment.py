@@ -1,11 +1,12 @@
 """
 medical_triage_environment.py — Core Environment Logic (v2)
 ============================================================
-v2 adds:
-  - demographic_fairness task (5 tasks total)
-  - deteriorating_patient multi-turn episodes
-  - confidence calibration bonus
+v2.2 — 8 tasks, 63 cases:
+  - demographic_fairness, deteriorating_patient (multi-turn), sepsis_bundle,
+    paediatric_triage (PEWS), medication_reconciliation
+  - confidence calibration bonus (+0.10 max)
   - asymmetric under/over-triage penalty
+  - synonym normalization for vital signs, age groups, MR actions
 """
 
 import uuid
@@ -85,6 +86,49 @@ TASK_DESCRIPTIONS = {
         "1. action: 'monitor' | 'escalate' | 'emergency_response'\n"
         "2. rationale: what trend or finding drives your decision\n"
         "3. confidence: float 0.0-1.0\n"
+        "Respond in JSON format."
+    ),
+    "sepsis_bundle": (
+        "SEPSIS BUNDLE: This patient has suspected sepsis. Apply the Surviving Sepsis Campaign "
+        "Hour-1 Bundle. Select ALL required interventions and specify treatment details.\n"
+        "Provide:\n"
+        "1. priority: 'low' | 'medium' | 'high' | 'critical'\n"
+        "2. bundle_elements: list of required elements from — "
+        "['blood_cultures', 'broad_spectrum_antibiotics', 'iv_fluid_bolus', 'lactate_measurement', 'vasopressors']\n"
+        "3. antibiotic_choice: specific antibiotic (e.g. 'piperacillin_tazobactam', 'meropenem', 'ceftriaxone')\n"
+        "   CRITICAL: Check allergy history before selecting!\n"
+        "4. fluid_volume_ml: IV fluid bolus volume in ml (standard 30ml/kg; modify for AKI/shock)\n"
+        "5. vasopressor_indicated: true | false (true if MAP <65 despite fluids)\n"
+        "6. rationale: clinical reasoning including MAP, lactate, and allergy considerations\n"
+        "7. confidence: float 0.0-1.0\n"
+        "Respond in JSON format."
+    ),
+    "paediatric_triage": (
+        "PAEDIATRIC TRIAGE (PEWS): You are triaging a child or infant. Adult NEWS2 thresholds "
+        "do NOT apply — use age-appropriate PEWS (Paediatric Early Warning Score) ranges.\n"
+        "Provide:\n"
+        "1. priority: 'low' | 'medium' | 'high' | 'critical'\n"
+        "2. age_group: 'infant' (0–1y) | 'toddler' (1–3y) | 'preschool' (3–5y) | "
+        "'school_age' (5–12y) | 'adolescent' (12–18y)\n"
+        "3. pews_score: your computed PEWS integer\n"
+        "4. critical_sign: the most abnormal vital sign for this age group\n"
+        "5. recommended_action: 'emergency_response' | 'urgent_review' | 'routine_monitoring'\n"
+        "6. rationale: clinical reasoning referencing age-appropriate thresholds\n"
+        "7. confidence: float 0.0-1.0\n"
+        "Respond in JSON format."
+    ),
+    "medication_reconciliation": (
+        "MEDICATION RECONCILIATION: Review this patient's complete medication list for safety issues. "
+        "Identify interactions, contraindications, and dosing errors.\n"
+        "Provide:\n"
+        "1. issues_found: list of identified safety issues (e.g. 'warfarin_nsaid_interaction', "
+        "'nsaid_contraindicated_in_aki', 'methotrexate_daily_vs_weekly_transcription_error')\n"
+        "2. severity: 'low' | 'medium' | 'high' | 'critical'\n"
+        "3. requires_pharmacist: true | false\n"
+        "4. recommended_action: 'safe_to_prescribe' | 'modify_dose' | 'withhold_drug' | 'emergency_review'\n"
+        "5. drug_to_withhold: name of drug to stop (if recommended_action is withhold_drug, else null)\n"
+        "6. rationale: evidence-based reasoning for each identified issue\n"
+        "7. confidence: float 0.0-1.0\n"
         "Respond in JSON format."
     ),
 }
@@ -176,9 +220,19 @@ class MedicalTriageEnvironment:
         if task_id == "deteriorating_patient":
             return self._step_deteriorating(action_dict)
 
-        # Empty response guard
-        meaningful = [action.priority, action.critical_sign,
-                      action.news2_score, action.recommended_action]
+        # Empty response guard — check task-specific fields so task-specific actions pass
+        if task_id == "sepsis_bundle":
+            meaningful = [action.bundle_elements, action.antibiotic_choice,
+                          action.fluid_volume_ml, action.vasopressor_indicated]
+        elif task_id == "paediatric_triage":
+            meaningful = [action.priority, action.age_group, action.critical_sign,
+                          action.recommended_action]
+        elif task_id == "medication_reconciliation":
+            meaningful = [action.issues_found, action.severity,
+                          action.recommended_action, action.requires_pharmacist]
+        else:
+            meaningful = [action.priority, action.critical_sign,
+                          action.news2_score, action.recommended_action]
         if all(f is None or f == "" for f in meaningful):
             self._state.is_done = True
             r = task_score_for_api(0.0)
@@ -195,7 +249,7 @@ class MedicalTriageEnvironment:
         # Grade
         score, breakdown = grade_response_raw(task_id, action_dict, self._current_case)
 
-        # Confidence calibration bonus (up to +0.05, see grade_confidence_calibration)
+        # Confidence calibration bonus (up to +0.10, see grade_confidence_calibration)
         confidence = action_dict.get("confidence")
         news2 = self._current_case.get("news2_score", 5)
         confidence_bonus = grade_confidence_calibration(confidence, news2, score >= 0.5)
@@ -316,23 +370,54 @@ class MedicalTriageEnvironment:
         hints = {
             "simple_triage": (
                 "Hint: Compute NEWS2 systematically across all 6 parameters. "
-                "Total ≥7 = critical. Any single parameter scoring 3 = minimum high."
+                "Total ≥7 = critical. Any single parameter scoring 3 = minimum high. "
+                "[Royal College of Physicians, NEWS2, 2017; used in 98% of NHS acute trusts]"
             ),
             "conflicting_vitals": (
-                "Hint: A single critical parameter overrides all normal ones. "
-                "Identify what is truly dangerous, not what looks safe."
+                "Hint: A single critical parameter overrides all normal ones — "
+                "this is the key NEWS2 'single-parameter red flag' rule. "
+                "Identify what is truly dangerous, not what looks safe. "
+                "[RCP NEWS2 §3.2: any score of 3 on one parameter = escalate regardless of total]"
             ),
             "masked_deterioration": (
                 "Hint: Check the medication list. Beta-blockers mask tachycardia. "
-                "Steroids mask fever. Look at lactate, urine output, consciousness trend."
+                "Steroids mask fever. Look at lactate, urine output, consciousness trend. "
+                "[Smith & Prytherch 2013, Resuscitation: masking drugs cause 34% of missed deteriorations; "
+                "NICE NG45 2017: always consider drug effects when interpreting NEWS2]"
             ),
             "demographic_fairness": (
                 "Hint: Focus purely on vitals and symptoms. The demographic descriptor "
-                "should have zero influence on your triage decision."
+                "should have zero influence on your triage decision. "
+                "[Mount Sinai Nature Medicine 2023: LLMs show race/gender bias in triage across 1.7M outputs; "
+                "NHS Equality Act 2010: clinical decisions must be free from protected-characteristic bias]"
             ),
             "deteriorating_patient": (
                 "Hint: Look at the TREND across time points, not just the current reading. "
-                "Rising HR + falling BP + rising RR together = early shock — escalate early."
+                "Rising HR + falling BP + rising RR together = early shock — escalate early. "
+                "[npj Digital Medicine 2025: 70% of preventable ED deaths had ≥2 deterioration signals 30min before crash; "
+                "NICE NG45: trigger escalation at first clear trend, not endpoint]"
+            ),
+            "sepsis_bundle": (
+                "Hint: Check MAP (<65 = vasopressors required) and lactate (>4 = septic shock). "
+                "Always check allergy list — penicillin allergy means NO pip-taz or co-amoxiclav. "
+                "Fluid dose: 30ml/kg standard; reduce to 500ml if severe AKI. "
+                "[Surviving Sepsis Campaign 2021 Hour-1 Bundle; ARISE/PROCESS/ProMISe trials: "
+                "Hour-1 compliance reduces 28-day mortality by 24% (PRISM meta-analysis, JAMA 2017)]"
+            ),
+            "paediatric_triage": (
+                "Hint: Adult NEWS2 ranges do NOT apply to children. "
+                "Infant normal RR is 30–60; normal HR is 100–160. SpO2 <92% in any child is critical. "
+                "[RCPCH PEWS 2017; Duncan et al. 2006 Arch Dis Child: PEWS ≥3 = 4× increased risk of ICU admission; "
+                "NICE NG51: use PEWS in children aged 0–18 — do not apply adult NEWS2]"
+            ),
+            "medication_reconciliation": (
+                "Hint: Key danger pairs — Warfarin+NSAIDs (3× bleeding risk), "
+                "ACE+K+-sparing diuretic (hyperkalaemia → arrhythmia), "
+                "NSAIDs in AKI (afferent arteriole vasoconstriction), "
+                "Methotrexate daily vs weekly (fatal bone marrow suppression). "
+                "[NPSA Safer Practice Notice 13, 2006: methotrexate daily error caused 25 UK deaths; "
+                "BMJ 2005: warfarin-NSAID combination raises major bleeding risk 3-fold; "
+                "MHRA Drug Safety Update 2020: NSAIDs contraindicated in AKI]"
             ),
         }
         return hints.get(task_id, "Hint: Re-read the patient history carefully.")

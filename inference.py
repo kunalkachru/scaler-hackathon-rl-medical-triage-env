@@ -69,6 +69,31 @@ For masked_deterioration, respond with:
 
 For deteriorating_patient, respond ONLY with:
   {"action":"monitor|escalate|emergency_response","rationale":"<reasoning>","confidence":<0-1>}
+
+For sepsis_bundle, respond with:
+  {"priority":"high|critical","bundle_elements":["blood_cultures","broad_spectrum_antibiotics","iv_fluid_bolus","lactate_measurement","vasopressors"],"antibiotic_choice":"<antibiotic>","fluid_volume_ml":<int>,"vasopressor_indicated":true|false,"rationale":"<MAP+lactate+allergy reasoning>","confidence":<0-1>}
+  CRITICAL RULES for sepsis_bundle:
+  - Check allergy history — NEVER give piperacillin_tazobactam/co-amoxiclav/amoxicillin if penicillin allergy. Use meropenem or levofloxacin instead.
+  - fluid_volume_ml: standard 30ml/kg (~2000ml for 70kg patient); reduce to 500ml if severe AKI (creatinine >300 or oliguria documented)
+  - vasopressor_indicated: true if MAP <65 despite fluids; false if MAP >=65
+  - Always include blood_cultures and lactate_measurement in bundle_elements
+
+For paediatric_triage, respond with:
+  {"priority":"low|medium|high|critical","age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<int>,"critical_sign":"<vital_sign>","recommended_action":"emergency_response|urgent_review|routine_monitoring","confidence":<0-1>}
+  CRITICAL RULES for paediatric_triage:
+  - Use age-appropriate vital sign thresholds (NOT adult NEWS2): infants RR 30-60, HR 100-160; toddlers RR 24-40, HR 90-150; school_age RR 18-30, HR 70-110; adolescents RR 12-20, HR 60-100
+  - SpO2 <92% in any child = HIGH or CRITICAL priority
+  - Prolonged capillary refill (>2s) is a critical paediatric sign not in adult NEWS2
+  - Parental concern ('not right') is a validated clinical indicator — take seriously
+
+For medication_reconciliation, respond with:
+  {"issues_found":["<issue_type>",...],"severity":"low|medium|high|critical","requires_pharmacist":true|false,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","rationale":"<reasoning>","confidence":<0-1>}
+  CRITICAL RULES for medication_reconciliation:
+  - NSAIDs are CONTRAINDICATED in AKI (worsens renal perfusion) and dangerous with warfarin (3x GI bleed risk)
+  - Methotrexate is ALWAYS weekly for non-oncology use — daily dosing = life-threatening error (NPSA 2006)
+  - ACE inhibitor + potassium-sparing diuretic = hyperkalaemia risk, especially in CKD
+  - Morphine accumulates in renal failure (eGFR <30) — use oxycodone at reduced dose instead
+  - NEVER give penicillin-class antibiotics (amoxicillin, piperacillin) with documented penicillin anaphylaxis
 """
 
 
@@ -278,11 +303,14 @@ def main():
 
     # Run 2 cases per task to preserve baseline comparability.
     TASKS = [
-        ("simple_triage",       "Easy",   [0, 1]),
-        ("conflicting_vitals",  "Medium", [0, 1]),
-        ("masked_deterioration","Hard",   [0, 1]),
-        ("demographic_fairness","Medium", [0, 1]),   # FP001 white_male + black_male — same group, enables parity scoring
-        ("deteriorating_patient","Hard",  [0, 1]),   # MULTI-TURN
+        ("simple_triage",            "Easy",   [0, 1]),
+        ("conflicting_vitals",       "Medium", [0, 1]),
+        ("masked_deterioration",     "Hard",   [0, 1]),
+        ("demographic_fairness",     "Medium", [0, 1]),   # FP001 white_male + black_male — same group, enables parity scoring
+        ("deteriorating_patient",    "Hard",   [0, 1]),   # MULTI-TURN
+        ("sepsis_bundle",            "Hard",   [0, 1]),   # SB001 (shock+vasopressors) + SB002 (no shock)
+        ("paediatric_triage",        "Hard",   [0, 2]),   # PD001 infant bronchiolitis + PD003 paediatric DKA
+        ("medication_reconciliation","Hard",   [0, 3]),   # MR001 warfarin-NSAID + MR004 methotrexate overdose
     ]
 
     for task_id, _difficulty, case_indices in TASKS:
