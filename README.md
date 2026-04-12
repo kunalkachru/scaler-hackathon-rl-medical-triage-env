@@ -469,14 +469,26 @@ Run one-command full release gate (local + baseline reproducibility + live API +
 
 ```bash
 chmod +x ./scripts/full_release_gate.sh
+
+# First-time / clean machine (auto-installs Playwright + Chromium ~130MB):
 ./scripts/full_release_gate.sh \
   --base-url "https://<your-space>.hf.space" \
   --repo-id "<your-username>/<your-space-name>" \
   --expect-llm true
 
+# If Playwright is already installed (skips re-download, faster):
+./scripts/full_release_gate.sh \
+  --base-url "https://<your-space>.hf.space" \
+  --repo-id "<your-username>/<your-space-name>" \
+  --expect-llm true \
+  --skip-playwright-install
+
 # If already deployed and you only want verification:
 ./scripts/full_release_gate.sh --skip-deploy --base-url "https://<your-space>.hf.space" --expect-llm true
 ```
+
+> If you get a "Playwright not found" error with `--skip-playwright-install`, run:
+> `python -m pip install playwright && python -m playwright install chromium`
 
 Before running the release gate, export baseline env vars used by `inference.py`:
 
