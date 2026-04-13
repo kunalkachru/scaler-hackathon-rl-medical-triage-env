@@ -55,9 +55,17 @@ REPS_PER_TASK = int(os.getenv("REPS_PER_TASK", "3"))
 # Each task uses the same case across all REPS_PER_TASK repetitions
 # so the learning signal is isolated from case-difficulty variation.
 TRAINING_TASKS = [
-    ("simple_triage",       0),   # ST001 — elevated RR, SpO2 93% → high
-    ("conflicting_vitals",  0),   # CV001 — silent hypoxia trap
-    ("masked_deterioration", 0),  # MD001 — bisoprolol masking septic shock
+    ("simple_triage",            0),  # ST001 — elevated RR, SpO2 93% → high
+    ("conflicting_vitals",       0),  # CV001 — silent hypoxia trap
+    ("masked_deterioration",     0),  # MD001 — bisoprolol masking septic shock
+    ("demographic_fairness",     0),  # DF001 — identical vitals, different demographics
+    ("deteriorating_patient",    0),  # DT001 — post-op deterioration, multi-turn
+    ("sepsis_bundle",            0),  # SB001 — septic shock, full Hour-1 bundle
+    ("paediatric_triage",        0),  # PD001 — infant bronchiolitis, PEWS
+    ("medication_reconciliation", 0), # MR001 — warfarin + NSAID interaction
+    ("icu_deterioration",        0),  # IC001 — septic shock worsening, SOFA=14
+    ("sbar_handover",            0),  # SH001 — post-op sepsis critical handover
+    ("differential_diagnosis",   0),  # DD001 — chest pain, STEMI must-not-miss
 ]
 
 TEMPERATURE = 0.2   # small noise to allow variation across reps
@@ -83,6 +91,21 @@ For conflicting_vitals, respond with:
 
 For masked_deterioration, respond with:
   {"priority":"<level>","masking_drug_or_condition":"<drug>","masked_sign":"<vital>","critical_clues":["<clue>"],"condition":"<diagnosis>","recommended_action":"<action>","rationale":"<reasoning>","confidence":<0-1>}
+
+For demographic_fairness, respond with:
+  {"priority":"low|medium|high|critical","news2_score":<int>,"critical_sign":"<param>","recommended_action":"emergency_response|urgent_review|routine_monitoring","rationale":"<reasoning>","confidence":<0-1>}
+
+For deteriorating_patient, respond with:
+  {"action":"monitor|escalate|emergency_response|comfort_care","rationale":"<reasoning>","confidence":<0-1>}
+
+For sepsis_bundle, respond with:
+  {"priority":"high|critical","bundle_elements":["blood_cultures","broad_spectrum_antibiotics","iv_fluid_bolus","lactate_measurement","vasopressors"],"antibiotic_choice":"<drug>","fluid_volume_ml":<int>,"vasopressor_indicated":<bool>,"rationale":"<reasoning>","confidence":<0-1>}
+
+For paediatric_triage, respond with:
+  {"priority":"low|medium|high|critical","age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<int>,"critical_sign":"<param>","recommended_action":"emergency_response|urgent_review|routine_monitoring","rationale":"<reasoning>","confidence":<0-1>}
+
+For medication_reconciliation, respond with:
+  {"issues_found":["<issue>"],"severity":"low|medium|high|critical","requires_pharmacist":<bool>,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","drug_to_withhold":"<drug_or_null>","rationale":"<reasoning>","confidence":<0-1>}
 """
 
 IMPROVEMENT_ADVICE = {
@@ -100,6 +123,35 @@ IMPROVEMENT_ADVICE = {
         "If masking_mechanism is low: name the exact drug or condition suppressing warning signs. "
         "If critical_clues is low: look for lactate, ECG, urine output, and medication history. "
         "NEWS2 may appear LOW despite true critical state — do NOT trust it at face value."
+    ),
+    "demographic_fairness": (
+        "Treat every patient identically regardless of race, gender, or socioeconomic status. "
+        "Base your triage purely on NEWS2 vitals — demographics must NOT change priority. "
+        "If score is low: check that your priority and critical_sign match the vitals, not the demographics."
+    ),
+    "deteriorating_patient": (
+        "At T=0 with stable vitals: 'monitor' is correct. Do NOT escalate prematurely. "
+        "When vitals worsen significantly (NEWS2 ≥5 or single red flag): escalate immediately. "
+        "If score is low: check the timing — early escalation on stable patient loses points."
+    ),
+    "sepsis_bundle": (
+        "The Hour-1 Surviving Sepsis Campaign bundle requires: blood_cultures, broad_spectrum_antibiotics, "
+        "iv_fluid_bolus (30ml/kg), lactate_measurement. Vasopressors only if MAP<65 or refractory shock. "
+        "If antibiotic score low: use piperacillin_tazobactam for most cases; meropenem for resistant/ICU. "
+        "If fluid_volume low: calculate 30ml/kg from patient weight in history."
+    ),
+    "paediatric_triage": (
+        "Use age-appropriate PEWS thresholds — infant SpO2 <95% is critical, adolescent <92% is critical. "
+        "Capillary refill >2s and parental concern are red flags at any age. "
+        "If age_group is wrong: re-read the patient age carefully (infant=<1yr, toddler=1-3, preschool=3-5, "
+        "school_age=5-12, adolescent=12-18). If pews_score low: sum all PEWS dimensions for the correct age band."
+    ),
+    "medication_reconciliation": (
+        "Key interactions to know: warfarin+NSAIDs=bleeding risk; ACE inhibitor+K+-sparing diuretic=hyperkalaemia; "
+        "methotrexate is ALWAYS weekly (never daily); NSAIDs contraindicated in AKI/CKD; "
+        "penicillin allergy = amoxicillin/co-amoxiclav contraindicated. "
+        "If issues_found score low: list ALL interactions present, not just the most obvious one. "
+        "If severity wrong: methotrexate daily error and anaphylaxis risk = critical."
     ),
 }
 

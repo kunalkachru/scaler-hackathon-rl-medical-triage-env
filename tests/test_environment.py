@@ -66,7 +66,7 @@ class TestEnvironmentReset:
         env = MedicalTriageEnvironment()
         result = env.reset()
         assert result.observation.available_tasks is not None
-        assert len(result.observation.available_tasks) == 8
+        assert len(result.observation.available_tasks) == 11
 
 
 class TestEnvironmentStep:

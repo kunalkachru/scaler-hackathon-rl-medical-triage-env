@@ -194,6 +194,68 @@ class TriageAction(BaseModel):
         description="Name of drug to withhold if recommended_action is 'withhold_drug'"
     )
 
+    # Task 9 specific (ICU deterioration)
+    sofa_score: Optional[int] = Field(
+        default=None,
+        description="Agent's computed SOFA score (0-24)"
+    )
+    primary_organ_failure: Optional[str] = Field(
+        default=None,
+        description="Primary failing organ system: respiratory|cardiovascular|renal|hepatic|neurological|coagulation"
+    )
+    deterioration_trend: Optional[str] = Field(
+        default=None,
+        description="ICU trajectory: worsening|stable|improving"
+    )
+    intervention: Optional[str] = Field(
+        default=None,
+        description="ICU intervention: emergency_escalation|increase_support|maintain_current|prepare_palliation"
+    )
+
+    # Task 10 specific (SBAR handover)
+    escalation_required: Optional[bool] = Field(
+        default=None,
+        description="Whether immediate escalation is required"
+    )
+    situation: Optional[str] = Field(
+        default=None,
+        description="SBAR Situation component — what is happening right now"
+    )
+    background: Optional[str] = Field(
+        default=None,
+        description="SBAR Background component — relevant history"
+    )
+    assessment: Optional[str] = Field(
+        default=None,
+        description="SBAR Assessment component — clinical problem identification"
+    )
+    recommendation: Optional[str] = Field(
+        default=None,
+        description="SBAR Recommendation component — what action is needed"
+    )
+
+    # Task 11 specific (differential diagnosis)
+    top_diagnosis: Optional[str] = Field(
+        default=None,
+        description="Most likely diagnosis"
+    )
+    differentials: Optional[list[str]] = Field(
+        default=None,
+        description="List of other diagnoses to consider"
+    )
+    must_not_miss: Optional[str] = Field(
+        default=None,
+        description="Safety-critical diagnosis that cannot be missed"
+    )
+    first_investigation: Optional[str] = Field(
+        default=None,
+        description="Single most important first investigation (e.g. ecg, ct_head, blood_glucose)"
+    )
+    urgency: Optional[str] = Field(
+        default=None,
+        description="Clinical urgency: immediate|urgent|routine"
+    )
+
     # Optional free-text rationale (used in Task 2 grader)
     rationale: Optional[str] = Field(
         default=None,

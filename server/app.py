@@ -48,7 +48,7 @@ app = FastAPI(
         "An AI agent reads patient cases and performs triage using NEWS2 and clinical reasoning. "
         "Eight tasks: simple triage, conflicting vitals, masked deterioration, demographic fairness, deteriorating patient, sepsis bundle compliance, paediatric triage (PEWS), and medication reconciliation."
     ),
-    version="2.2.0",
+    version="2.3.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -162,7 +162,7 @@ history = EpisodeHistory()
 @app.get("/health")
 async def health():
     """Health check endpoint. Must return 200 for HF Spaces deployment."""
-    return {"status": "healthy", "service": "medical-triage-env", "version": "2.2.0"}
+    return {"status": "healthy", "service": "medical-triage-env", "version": "2.3.0"}
 
 
 # ─────────────────────────────────────────────────────────────
@@ -911,7 +911,7 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
     <h1>Medical Triage Environment</h1>
     <div style="font-size:11px;color:var(--muted);margin-top:2px">OpenEnv RL Environment &middot; NHS NEWS2 &middot; Team Falcons</div>
   </div>
-  <span class="version">v2.2.0</span>
+  <span class="version">v2.3.0</span>
 </header>
 
 <div class="research-banner">

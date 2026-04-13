@@ -2400,6 +2400,442 @@ MEDICATION_RECONCILIATION_CASES = [
 ]
 
 # ─────────────────────────────────────────────────────────────
+# TASK 9: ICU DETERIORATION
+# Agent reads an ICU chart note with SOFA components and trends.
+# Must identify: SOFA score, primary organ failure, deterioration
+# trend, and appropriate intervention.
+# Clinical basis: SOFA (Sequential Organ Failure Assessment)
+# ─────────────────────────────────────────────────────────────
+ICU_DETERIORATION_CASES = [
+    {
+        "case_id": "IC001",
+        "task_id": "icu_deterioration",
+        "history": (
+            "65-year-old male. Day 2 of ICU admission for community-acquired pneumonia with septic shock. "
+            "Ventilated: FiO2=0.65, PEEP=12, SpO2=89%. Noradrenaline 0.35 mcg/kg/min (MAP=58mmHg despite fluids). "
+            "Creatinine 280 umol/L (baseline 85), urine output 18 ml/hr. GCS=9 (E2V3M4). Bilirubin normal. "
+            "Platelets 98. Lactate 4.2 mmol/L (was 2.8 at 0600). Temperature 39.4°C. "
+            "Trend: SOFA was 6 at admission (8hr ago), now reassessed as 10. "
+            "ABG: pH 7.28, PaO2 58 mmHg on FiO2 0.65 (P/F ratio 89)."
+        ),
+        "vitals": {
+            "fio2": 0.65, "spo2": 89, "pf_ratio": 89,
+            "map": 58, "noradrenaline_mcg_kg_min": 0.35,
+            "creatinine": 280, "urine_output_ml_hr": 18,
+            "gcs": 9, "bilirubin": 18, "platelets": 98,
+            "lactate": 4.2, "temperature": 39.4,
+        },
+        "sofa_score": 10,
+        "sofa_trend": "worsening",
+        "primary_organ_failure": "cardiovascular",
+        "expected_intervention": "emergency_escalation",
+        "ground_truth": {
+            "sofa_score": 10,
+            "primary_organ_failure": "cardiovascular",
+            "deterioration_trend": "worsening",
+            "intervention": "emergency_escalation",
+            "rationale": (
+                "SOFA risen from 6 to 10 in 8 hours. "
+                "MAP=58 despite escalating vasopressors (cardiovascular SOFA=4). "
+                "P/F ratio 89 (respiratory SOFA=4). Rising lactate signals deteriorating perfusion. "
+                "Requires urgent senior review and consideration of second vasopressor."
+            ),
+        },
+    },
+    {
+        "case_id": "IC002",
+        "task_id": "icu_deterioration",
+        "history": (
+            "72-year-old female. Day 2 post elective aortic valve replacement. "
+            "Haemodynamically stable: MAP=72mmHg, no vasopressors. Off ventilator, on 4L nasal cannula SpO2=96%. "
+            "Creatinine rising: 90 (pre-op) → 145 (day 1) → 185 (today). Urine output 32 ml/hr. "
+            "GCS 15. Bilirubin normal. Platelets 180. Lactate 1.1 mmol/L. "
+            "SOFA score: 3 (renal component driving). Trend: SOFA stable at 3 for past 12 hours. "
+            "Surgical team aware. Nephrology consulted."
+        ),
+        "vitals": {
+            "map": 72, "spo2": 96, "oxygen_l_min": 4,
+            "creatinine": 185, "urine_output_ml_hr": 32,
+            "gcs": 15, "bilirubin": 12, "platelets": 180,
+            "lactate": 1.1,
+        },
+        "sofa_score": 3,
+        "sofa_trend": "stable",
+        "primary_organ_failure": "renal",
+        "expected_intervention": "maintain_current",
+        "ground_truth": {
+            "sofa_score": 3,
+            "primary_organ_failure": "renal",
+            "deterioration_trend": "stable",
+            "intervention": "maintain_current",
+            "rationale": (
+                "Post-cardiac surgery AKI with stable SOFA=3. "
+                "Haemodynamically stable, lactate normal. "
+                "Renal function declining but rate stable. "
+                "Continue current management with close monitoring. Nephrology involved."
+            ),
+        },
+    },
+    {
+        "case_id": "IC003",
+        "task_id": "icu_deterioration",
+        "history": (
+            "58-year-old male. Day 5 ICU for ARDS secondary to aspiration pneumonia. "
+            "Mechanically ventilated: FiO2=0.70, PEEP=16, tidal volume 6ml/kg, RR=28. "
+            "P/F ratio 130 (was 160 yesterday — moderate ARDS worsening). Plateau pressure 32 cmH2O. "
+            "MAP=78mmHg on low-dose noradrenaline 0.08 mcg/kg/min. Creatinine stable 110. "
+            "GCS sedated (RASS -2). Platelets 210. Lactate 1.8 mmol/L. SOFA=8. "
+            "Trend: P/F ratio declining over 24 hours despite current ventilator settings."
+        ),
+        "vitals": {
+            "fio2": 0.70, "pf_ratio": 130, "peep": 16, "plateau_pressure": 32,
+            "map": 78, "noradrenaline_mcg_kg_min": 0.08,
+            "creatinine": 110, "gcs_sedated": True,
+            "platelets": 210, "lactate": 1.8,
+        },
+        "sofa_score": 8,
+        "sofa_trend": "worsening",
+        "primary_organ_failure": "respiratory",
+        "expected_intervention": "increase_support",
+        "ground_truth": {
+            "sofa_score": 8,
+            "primary_organ_failure": "respiratory",
+            "deterioration_trend": "worsening",
+            "intervention": "increase_support",
+            "rationale": (
+                "ARDS with worsening P/F ratio (160→130) over 24 hours. "
+                "Plateau pressure 32 cmH2O approaching danger threshold. "
+                "Haemodynamically stable. "
+                "Indication for prone positioning trial and respiratory physiotherapy. "
+                "Consider neuromuscular blockade review."
+            ),
+        },
+    },
+    {
+        "case_id": "IC004",
+        "task_id": "icu_deterioration",
+        "history": (
+            "81-year-old male. Day 7 post out-of-hospital cardiac arrest (VF). "
+            "No return of purposeful movement. GCS=4 (E1V1M2). Targeted temperature management completed. "
+            "CT brain: diffuse anoxic injury. EEG: burst suppression. "
+            "Ventilated: FiO2=0.45, SpO2=96%. MAP=62 on noradrenaline 0.28 mcg/kg/min. "
+            "Creatinine 310 (acute-on-chronic renal failure). Bilirubin 68 (rising). "
+            "Platelets 62. Lactate 3.8 mmol/L. SOFA=18. "
+            "Family meeting held yesterday: family understand prognosis is 'very poor'. "
+            "Palliative care team involved."
+        ),
+        "vitals": {
+            "gcs": 4, "fio2": 0.45, "spo2": 96,
+            "map": 62, "noradrenaline_mcg_kg_min": 0.28,
+            "creatinine": 310, "bilirubin": 68,
+            "platelets": 62, "lactate": 3.8,
+        },
+        "sofa_score": 18,
+        "sofa_trend": "worsening",
+        "primary_organ_failure": "neurological",
+        "expected_intervention": "prepare_palliation",
+        "ground_truth": {
+            "sofa_score": 18,
+            "primary_organ_failure": "neurological",
+            "deterioration_trend": "worsening",
+            "intervention": "prepare_palliation",
+            "rationale": (
+                "SOFA=18 with diffuse anoxic brain injury post-cardiac arrest. "
+                "GCS=4, no purposeful movement, burst suppression on EEG. "
+                "Multiorgan failure (neurological, cardiovascular, renal, hepatic, coagulation). "
+                "Family meeting completed. Goals of care discussion appropriate. "
+                "Withdrawal of life-sustaining treatment is ethically appropriate."
+            ),
+        },
+    },
+]
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 10: SBAR HANDOVER
+# Agent reads a clinical handover scenario and must evaluate
+# whether escalation is required and classify urgency.
+# Clinical basis: NHS SBAR (Situation-Background-Assessment-
+# Recommendation) framework.
+# ─────────────────────────────────────────────────────────────
+SBAR_HANDOVER_CASES = [
+    {
+        "case_id": "SH001",
+        "task_id": "sbar_handover",
+        "history": (
+            "HANDOVER SCENARIO — Nurse calling on-call doctor at 02:30.\n"
+            "Situation: Mrs Ahmed, 68F, day 2 post-laparoscopic cholecystectomy. "
+            "I am calling because she has become increasingly confused over the past hour.\n"
+            "Background: PMH hypertension, type 2 diabetes. Pre-op BP 135/80, "
+            "HR 72, Temp 36.8°C. Intraoperative: uncomplicated. "
+            "Post-op analgesia: morphine PCA. Last bloods 8 hours ago: Hb 11.2, WBC 8.4, CRP 22.\n"
+            "Assessment: Current vitals: RR=26, SpO2=89% on room air, BP=88/54, HR=128, Temp=38.9°C, "
+            "GCS=13 (E3V4M6). NEWS2=13. Patient confused, pulling at PCA line. "
+            "Abdomen soft but slightly distended. Urine output 15 ml/hr last 3 hours.\n"
+            "Recommendation: I think she needs urgent review. "
+            "I have stopped the morphine PCA and applied 15L O2 via non-rebreathe mask."
+        ),
+        "escalation_required": True,
+        "expected_priority": "critical",
+        "key_assessment_terms": [
+            "news2", "sepsis", "confusion", "hypotension", "tachycardia",
+            "hypoxia", "oliguria", "post-op", "deterioration"
+        ],
+        "expected_recommendation": "emergency_response",
+        "ground_truth": {
+            "escalation_required": True,
+            "priority": "critical",
+            "assessment": "Post-operative sepsis with multiorgan compromise. NEWS2=13 is critical.",
+            "recommendation": "emergency_response",
+            "rationale": (
+                "Complete SBAR with critical findings: NEWS2=13, SpO2=89%, BP=88/54, "
+                "HR=128, confusion, oliguria. Post-op day 2 with fever = sepsis until proven otherwise. "
+                "Requires immediate review, IV access, bloods, cultures, antibiotics."
+            ),
+        },
+    },
+    {
+        "case_id": "SH002",
+        "task_id": "sbar_handover",
+        "history": (
+            "HANDOVER SCENARIO — Day shift to night shift nursing handover.\n"
+            "Situation: Mr Patel, 54M, admitted 3 days ago with community-acquired pneumonia. "
+            "Improving on IV co-amoxiclav.\n"
+            "Background: No significant PMH. Non-smoker. Fit and well prior to admission. "
+            "CXR on admission: right lower lobe consolidation. Started IV antibiotics Day 1.\n"
+            "Assessment: Today's vitals: RR=18, SpO2=96% on 2L nasal cannula, BP=124/76, "
+            "HR=84, Temp=37.4°C, GCS=15. NEWS2=1. Patient feels much better. "
+            "Tolerating oral fluids. Eating small amounts. CRP trending down: 180 → 95 → 42.\n"
+            "Recommendation: Plan to step down to oral antibiotics tomorrow if tolerating. "
+            "Continue 2L O2. Routine overnight observations."
+        ),
+        "escalation_required": False,
+        "expected_priority": "low",
+        "key_assessment_terms": [
+            "improving", "news2", "stable", "trending", "pneumonia", "recovery"
+        ],
+        "expected_recommendation": "routine_monitoring",
+        "ground_truth": {
+            "escalation_required": False,
+            "priority": "low",
+            "assessment": "Improving CAP. NEWS2=1. CRP trending down. Clinically improving.",
+            "recommendation": "routine_monitoring",
+            "rationale": (
+                "Clear improving trajectory. NEWS2=1. Inflammatory markers falling. "
+                "Patient subjectively improved. Safe for routine overnight monitoring. "
+                "No escalation needed. Plan for step-down documented."
+            ),
+        },
+    },
+    {
+        "case_id": "SH003",
+        "task_id": "sbar_handover",
+        "history": (
+            "HANDOVER SCENARIO — Emergency department nurse calling cardiology registrar.\n"
+            "Situation: Mr Thompson, 52M, walked in 20 minutes ago with 45-minute history of "
+            "crushing central chest pain radiating to left arm and jaw. Diaphoretic.\n"
+            "Background: Hypertension on amlodipine. Smoker 20 pack-years. "
+            "Father had MI aged 55. No previous cardiac history. No allergies.\n"
+            "Assessment: Vitals: RR=20, SpO2=96%, BP=142/88, HR=108, Temp=36.9°C. "
+            "12-lead ECG shows 3mm ST elevation in leads II, III, aVF with reciprocal changes V1-V4. "
+            "Troponin sent. IV access x2. Aspirin 300mg and GTN given by paramedics en route. "
+            "Pain now 7/10 (was 9/10). Patient alert and oriented.\n"
+            "Recommendation: Please come immediately — I think this is a STEMI. "
+            "I have activated the cath lab pathway."
+        ),
+        "escalation_required": True,
+        "expected_priority": "critical",
+        "key_assessment_terms": [
+            "stemi", "st elevation", "chest pain", "inferior", "ecg", "cath lab",
+            "myocardial infarction", "cardiac", "reperfusion"
+        ],
+        "expected_recommendation": "emergency_response",
+        "ground_truth": {
+            "escalation_required": True,
+            "priority": "critical",
+            "assessment": "Inferior STEMI. ST elevation II/III/aVF with reciprocal changes.",
+            "recommendation": "emergency_response",
+            "rationale": (
+                "Classic inferior STEMI presentation. 45 mins of crushing chest pain. "
+                "ST elevation II, III, aVF with reciprocal depression V1-V4. "
+                "Time-to-balloon critical. Cath lab activation appropriate. "
+                "Immediate cardiology response required."
+            ),
+        },
+    },
+    {
+        "case_id": "SH004",
+        "task_id": "sbar_handover",
+        "history": (
+            "HANDOVER SCENARIO — Post-procedure ward handover.\n"
+            "Situation: Ms Johnson, 34F, day 1 post-colonoscopy for polyp removal. "
+            "Reporting mild abdominal cramping — expected post-procedure.\n"
+            "Background: No PMH. Colonoscopy for routine screening (family history of bowel cancer). "
+            "Two small polyps removed (hot snare). Procedure note: no complications, haemostasis achieved.\n"
+            "Assessment: Vitals: RR=14, SpO2=99%, BP=118/72, HR=68, Temp=36.6°C, GCS=15. "
+            "NEWS2=0. Abdomen soft, mild generalised tenderness — expected. "
+            "Passed flatus. Tolerating fluids. No rectal bleeding. Bloods unremarkable.\n"
+            "Recommendation: Safe for discharge tomorrow morning if pain controlled. "
+            "Has been given colonoscopy aftercare leaflet. No medical concerns overnight."
+        ),
+        "escalation_required": False,
+        "expected_priority": "low",
+        "key_assessment_terms": [
+            "news2", "stable", "post-procedure", "expected", "no complications", "discharge"
+        ],
+        "expected_recommendation": "routine_monitoring",
+        "ground_truth": {
+            "escalation_required": False,
+            "priority": "low",
+            "assessment": "Routine post-colonoscopy. NEWS2=0. Expected mild cramping. No red flags.",
+            "recommendation": "routine_monitoring",
+            "rationale": (
+                "Normal post-colonoscopy course. Mild cramping expected after polypectomy. "
+                "NEWS2=0. No bleeding, no peritoneal signs. "
+                "Routine overnight monitoring. Discharge planned for morning."
+            ),
+        },
+    },
+]
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 11: DIFFERENTIAL DIAGNOSIS
+# Agent reads a clinical presentation and must identify the
+# must-not-miss diagnosis, top diagnosis, key differentials,
+# and the first investigation.
+# Clinical basis: Bayesian clinical reasoning with safety-net
+# diagnoses. High weight on must-not-miss (safety-critical).
+# ─────────────────────────────────────────────────────────────
+DIFFERENTIAL_DIAGNOSIS_CASES = [
+    {
+        "case_id": "DD001",
+        "task_id": "differential_diagnosis",
+        "history": (
+            "52-year-old male. Sudden onset crushing central chest pain radiating to left arm, "
+            "onset 35 minutes ago. Profuse diaphoresis. Nausea. "
+            "PMH: hypertension, type 2 diabetes (on metformin). Smoker 30 pack-years. "
+            "Vitals: RR=22, SpO2=95%, BP=144/90 (right) 146/88 (left — equal), "
+            "HR=108, Temp=36.8°C. Diaphoretic. No back pain. No tearing quality. "
+            "Family history: father died of 'heart attack' aged 58."
+        ),
+        "must_not_miss_diagnosis": "stemi",
+        "top_diagnosis": "acute_coronary_syndrome",
+        "expected_differentials": ["pulmonary_embolism", "aortic_dissection", "pericarditis"],
+        "expected_first_investigation": "ecg",
+        "expected_urgency": "immediate",
+        "ground_truth": {
+            "must_not_miss": "stemi",
+            "top_diagnosis": "acute_coronary_syndrome",
+            "differentials": ["pulmonary_embolism", "aortic_dissection", "pericarditis"],
+            "first_investigation": "ecg",
+            "urgency": "immediate",
+            "rationale": (
+                "Classic STEMI presentation: crushing central chest pain, radiation to left arm, "
+                "diaphoresis, nausea, multiple cardiovascular risk factors. "
+                "Equal bilateral BPs argue against aortic dissection. "
+                "ECG is the fastest, most diagnostic test — must be done in <10 mins. "
+                "PE possible (tachycardia, SpO2 95%) but crushing quality and risk factors favour ACS."
+            ),
+        },
+    },
+    {
+        "case_id": "DD002",
+        "task_id": "differential_diagnosis",
+        "history": (
+            "42-year-old female. 'Worst headache of my life' — sudden thunderclap onset during exercise "
+            "15 minutes ago. Severity 10/10 immediately at onset. Associated neck stiffness developing. "
+            "No fever. No focal neurology. No previous headache history. "
+            "Vitals: RR=16, SpO2=99%, BP=178/102, HR=92, Temp=37.1°C. GCS=14 (E4V4M6 — confused). "
+            "No papilloedema on fundoscopy. Photophobia present."
+        ),
+        "must_not_miss_diagnosis": "subarachnoid_haemorrhage",
+        "top_diagnosis": "subarachnoid_haemorrhage",
+        "expected_differentials": ["meningitis", "migraine", "hypertensive_crisis"],
+        "expected_first_investigation": "ct_head",
+        "expected_urgency": "immediate",
+        "ground_truth": {
+            "must_not_miss": "subarachnoid_haemorrhage",
+            "top_diagnosis": "subarachnoid_haemorrhage",
+            "differentials": ["meningitis", "migraine", "hypertensive_crisis"],
+            "first_investigation": "ct_head",
+            "urgency": "immediate",
+            "rationale": (
+                "Thunderclap headache maximal at onset = SAH until proven otherwise. "
+                "Neck stiffness and photophobia support meningeal irritation. "
+                "GCS=14 indicates altered consciousness. "
+                "Non-contrast CT head is the first investigation (sensitivity ~98% within 6 hours). "
+                "If CT negative, LP required to look for xanthochromia."
+            ),
+        },
+    },
+    {
+        "case_id": "DD003",
+        "task_id": "differential_diagnosis",
+        "history": (
+            "74-year-old male. Sudden severe central abdominal and back pain onset 30 minutes ago. "
+            "Severity 9/10. No radiation to legs. Diaphoretic. Syncopal episode at onset. "
+            "PMH: hypertension, hypercholesterolaemia. Ex-smoker. "
+            "On examination: pulsatile, expansile epigastric mass palpable. "
+            "Vitals: RR=24, SpO2=94%, BP=88/52, HR=132, Temp=36.4°C. Abdomen rigid."
+        ),
+        "must_not_miss_diagnosis": "abdominal_aortic_aneurysm",
+        "top_diagnosis": "abdominal_aortic_aneurysm",
+        "expected_differentials": ["mesenteric_ischaemia", "renal_colic", "bowel_obstruction"],
+        "expected_first_investigation": "ct_angiography",
+        "expected_urgency": "immediate",
+        "ground_truth": {
+            "must_not_miss": "abdominal_aortic_aneurysm",
+            "top_diagnosis": "abdominal_aortic_aneurysm",
+            "differentials": ["mesenteric_ischaemia", "renal_colic", "bowel_obstruction"],
+            "first_investigation": "ct_angiography",
+            "urgency": "immediate",
+            "rationale": (
+                "Ruptured AAA triad: sudden severe abdominal/back pain, pulsatile mass, haemodynamic collapse. "
+                "BP=88/52 with HR=132 = haemorrhagic shock. "
+                "This is a surgical emergency with minutes to hours to live without intervention. "
+                "CT angiography confirms anatomy for EVAR/open repair. "
+                "Renal colic unlikely with haemodynamic instability and pulsatile mass."
+            ),
+        },
+    },
+    {
+        "case_id": "DD004",
+        "task_id": "differential_diagnosis",
+        "history": (
+            "67-year-old male with type 1 diabetes. Found by wife at home acutely confused and "
+            "agitated, unable to recognise her. Onset approximately 20 minutes ago. "
+            "PMH: type 1 diabetes (on insulin glargine + novorapid), hypertension. "
+            "Wife reports he gave himself his novorapid injection 45 minutes ago but then "
+            "couldn't eat his meal because he 'felt sick'. "
+            "Vitals: RR=18, SpO2=97%, BP=162/94, HR=104, Temp=36.7°C. "
+            "GCS=12 (E3V4M5). Diaphoretic. Pale. Tremulous. No focal neurology."
+        ),
+        "must_not_miss_diagnosis": "hypoglycaemia",
+        "top_diagnosis": "hypoglycaemia",
+        "expected_differentials": ["stroke", "sepsis", "opioid_toxicity", "encephalopathy"],
+        "expected_first_investigation": "blood_glucose",
+        "expected_urgency": "immediate",
+        "ground_truth": {
+            "must_not_miss": "hypoglycaemia",
+            "top_diagnosis": "hypoglycaemia",
+            "differentials": ["stroke", "sepsis", "opioid_toxicity", "encephalopathy"],
+            "first_investigation": "blood_glucose",
+            "urgency": "immediate",
+            "rationale": (
+                "Insulin given without subsequent meal = iatrogenic hypoglycaemia. "
+                "Classic neuroglycopenic symptoms: confusion, agitation, diaphoresis, pallor, tremor. "
+                "Blood glucose takes 5 seconds and immediately guides treatment. "
+                "Must not miss: hypoglycaemia is fully reversible with immediate glucose. "
+                "Delay causes irreversible brain injury. "
+                "Stroke possible but no focal neurology and clear precipitant."
+            ),
+        },
+    },
+]
+
+
+# ─────────────────────────────────────────────────────────────
 # Master lookup by task_id
 # ─────────────────────────────────────────────────────────────
 CASE_BANK: dict[str, list[dict[str, Any]]] = {
@@ -2411,6 +2847,9 @@ CASE_BANK: dict[str, list[dict[str, Any]]] = {
     "sepsis_bundle": SEPSIS_BUNDLE_CASES,
     "paediatric_triage": PAEDIATRIC_TRIAGE_CASES,
     "medication_reconciliation": MEDICATION_RECONCILIATION_CASES,
+    "icu_deterioration": ICU_DETERIORATION_CASES,
+    "sbar_handover": SBAR_HANDOVER_CASES,
+    "differential_diagnosis": DIFFERENTIAL_DIAGNOSIS_CASES,
 }
 
 ALL_TASKS = list(CASE_BANK.keys())

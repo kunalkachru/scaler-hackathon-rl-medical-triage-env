@@ -5,7 +5,7 @@ Exports (observation, action, reward) triples from the Medical Triage Environmen
 to Hugging Face Datasets format (JSONL).
 
 This script:
-1. Runs inference across all 8 tasks (all cases) using the configured LLM
+1. Runs inference across all 11 tasks (all cases) using the configured LLM
 2. Records each (patient_history, task_id, action, reward, breakdown) tuple
 3. Saves as JSONL to datasets/medical_triage_triples.jsonl
 4. Optionally pushes to Hugging Face Hub if HF_DATASET_REPO is set
@@ -41,7 +41,7 @@ HF_DATASET_REPO = os.getenv("HF_DATASET_REPO", "")
 OUTPUT_DIR  = Path("datasets")
 OUTPUT_FILE = OUTPUT_DIR / "medical_triage_triples.jsonl"
 
-# All 8 tasks with representative cases per task
+# All 11 tasks with representative cases per task
 EXPORT_SCHEDULE = [
     ("simple_triage",            list(range(10))),   # 10 cases
     ("conflicting_vitals",       list(range(8))),    # 8 cases
@@ -51,6 +51,9 @@ EXPORT_SCHEDULE = [
     ("sepsis_bundle",            list(range(4))),    # 4 cases
     ("paediatric_triage",        list(range(6))),    # 6 cases
     ("medication_reconciliation", list(range(6))),   # 6 cases
+    ("icu_deterioration",        list(range(4))),    # 4 cases
+    ("sbar_handover",            list(range(4))),    # 4 cases
+    ("differential_diagnosis",   list(range(4))),    # 4 cases
 ]
 
 
@@ -152,7 +155,7 @@ def main() -> None:
     total = sum(len(cases) for _, cases in EXPORT_SCHEDULE)
     done = 0
 
-    print(f"\nExporting {total} episodes across 8 tasks...")
+    print(f"\nExporting {total} episodes across 11 tasks...")
     print(f"Output: {output_path}\n")
 
     for task_id, case_indices in EXPORT_SCHEDULE:

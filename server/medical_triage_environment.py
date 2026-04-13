@@ -131,6 +131,59 @@ TASK_DESCRIPTIONS = {
         "7. confidence: float 0.0-1.0\n"
         "Respond in JSON format."
     ),
+    "icu_deterioration": (
+        "ICU DETERIORATION: You are the ICU registrar reviewing this patient's chart. "
+        "Assess their current SOFA score, primary organ failure, and trajectory.\n"
+        "Provide:\n"
+        "1. sofa_score: your computed SOFA total (integer 0-24)\n"
+        "2. primary_organ_failure: the most critically failing organ system — "
+        "'respiratory' | 'cardiovascular' | 'renal' | 'hepatic' | 'neurological' | 'coagulation'\n"
+        "3. deterioration_trend: 'worsening' | 'stable' | 'improving'\n"
+        "4. intervention: your recommended action — "
+        "'emergency_escalation' | 'increase_support' | 'maintain_current' | 'prepare_palliation'\n"
+        "5. rationale: clinical reasoning referencing SOFA components and trend\n"
+        "6. confidence: float 0.0-1.0\n"
+        "CRITICAL RULES:\n"
+        "  - SOFA ≥ 15 with no reversible cause = consider goals of care / prepare_palliation\n"
+        "  - Rising SOFA + haemodynamic instability = emergency_escalation\n"
+        "  - New or worsening organ dysfunction = increase_support\n"
+        "  - Stable SOFA on current treatment = maintain_current\n"
+        "Respond in JSON format."
+    ),
+    "sbar_handover": (
+        "SBAR HANDOVER: Read this clinical handover communication and evaluate it.\n"
+        "Determine whether immediate escalation is required and classify priority.\n"
+        "Provide:\n"
+        "1. escalation_required: true | false (does this patient need immediate medical attention?)\n"
+        "2. priority: 'low' | 'medium' | 'high' | 'critical'\n"
+        "3. assessment: your clinical assessment of the patient's condition (free text)\n"
+        "4. recommendation: 'emergency_response' | 'urgent_review' | 'routine_monitoring'\n"
+        "5. rationale: your reasoning based on the SBAR content\n"
+        "6. confidence: float 0.0-1.0\n"
+        "CRITICAL RULES:\n"
+        "  - NEWS2 ≥ 7 or any single parameter score 3 = critical, escalation_required = true\n"
+        "  - NEWS2 5-6 = high, escalation likely required\n"
+        "  - NEWS2 0-1 with improving trend = low, routine monitoring\n"
+        "Respond in JSON format."
+    ),
+    "differential_diagnosis": (
+        "DIFFERENTIAL DIAGNOSIS: You are a senior clinician reviewing this presentation. "
+        "Apply systematic diagnostic reasoning to identify the most likely and must-not-miss diagnoses.\n"
+        "Provide:\n"
+        "1. must_not_miss: the single diagnosis that CANNOT be missed (life-threatening if delayed)\n"
+        "2. top_diagnosis: the most likely diagnosis given the full clinical picture\n"
+        "3. differentials: list of 2-4 other diagnoses to consider and exclude\n"
+        "4. first_investigation: the single most important first investigation\n"
+        "5. urgency: 'immediate' | 'urgent' | 'routine'\n"
+        "6. rationale: clinical reasoning for each choice\n"
+        "7. confidence: float 0.0-1.0\n"
+        "CRITICAL RULES:\n"
+        "  - Thunderclap headache → must_not_miss: subarachnoid_haemorrhage, first_investigation: ct_head\n"
+        "  - Crushing chest pain + diaphoresis → must_not_miss: stemi, first_investigation: ecg\n"
+        "  - Pulsatile abdominal mass + shock → must_not_miss: abdominal_aortic_aneurysm\n"
+        "  - Acute confusion in diabetic on insulin → must_not_miss: hypoglycaemia, first_investigation: blood_glucose\n"
+        "Respond in JSON format."
+    ),
 }
 
 
@@ -230,6 +283,15 @@ class MedicalTriageEnvironment:
         elif task_id == "medication_reconciliation":
             meaningful = [action.issues_found, action.severity,
                           action.recommended_action, action.requires_pharmacist]
+        elif task_id == "icu_deterioration":
+            meaningful = [action.sofa_score, action.primary_organ_failure,
+                          action.deterioration_trend, action.intervention]
+        elif task_id == "sbar_handover":
+            meaningful = [action.escalation_required, action.priority,
+                          action.assessment, action.recommendation]
+        elif task_id == "differential_diagnosis":
+            meaningful = [action.must_not_miss, action.top_diagnosis,
+                          action.differentials, action.first_investigation]
         else:
             meaningful = [action.priority, action.critical_sign,
                           action.news2_score, action.recommended_action]
