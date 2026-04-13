@@ -1,7 +1,7 @@
 """
 random_agent_baseline.py — Random Agent Lower Bound
 ====================================================
-Sends structurally valid but randomly chosen responses to all 8 tasks.
+Sends structurally valid but randomly chosen responses to all 11 tasks.
 Provides the theoretical lower bound for the leaderboard comparison.
 
 Usage:
@@ -91,6 +91,44 @@ def random_medication_reconciliation() -> dict:
     }
 
 
+ORGAN_FAILURES   = ["respiratory", "cardiovascular", "renal", "hepatic", "neurological", "coagulation"]
+ICU_INTERVENTIONS = ["emergency_escalation", "increase_support", "maintain_current", "prepare_palliation"]
+TRENDS           = ["worsening", "stable", "improving"]
+SBAR_RECS        = ["emergency_response", "urgent_review", "routine_monitoring"]
+DIAGNOSES        = ["stemi", "subarachnoid_haemorrhage", "abdominal_aortic_aneurysm", "hypoglycaemia",
+                    "pulmonary_embolism", "aortic_dissection", "meningitis", "stroke", "pericarditis"]
+INVESTIGATIONS   = ["ecg", "ct_head", "ct_angiography", "blood_glucose", "troponin", "d_dimer", "ct_chest", "lp"]
+
+
+def random_icu_deterioration() -> dict:
+    return {
+        "sofa_score": random.randint(0, 24),
+        "primary_organ_failure": random.choice(ORGAN_FAILURES),
+        "deterioration_trend": random.choice(TRENDS),
+        "intervention": random.choice(ICU_INTERVENTIONS),
+        "rationale": "random baseline",
+    }
+
+
+def random_sbar_handover() -> dict:
+    return {
+        "escalation_required": random.choice([True, False]),
+        "priority": random.choice(PRIORITIES),
+        "assessment": "random baseline assessment",
+        "recommendation": random.choice(SBAR_RECS),
+    }
+
+
+def random_differential_diagnosis() -> dict:
+    return {
+        "must_not_miss": random.choice(DIAGNOSES),
+        "top_diagnosis": random.choice(DIAGNOSES),
+        "differentials": random.sample(DIAGNOSES, k=3),
+        "first_investigation": random.choice(INVESTIGATIONS),
+        "urgency": random.choice(["immediate", "urgent", "routine"]),
+    }
+
+
 TASK_ACTION_FN = {
     "simple_triage":            random_simple_triage,
     "conflicting_vitals":       random_simple_triage,
@@ -100,6 +138,9 @@ TASK_ACTION_FN = {
     "sepsis_bundle":            random_sepsis_bundle,
     "paediatric_triage":        random_paediatric_triage,
     "medication_reconciliation": random_medication_reconciliation,
+    "icu_deterioration":        random_icu_deterioration,
+    "sbar_handover":            random_sbar_handover,
+    "differential_diagnosis":   random_differential_diagnosis,
 }
 
 TASKS = [
@@ -111,6 +152,9 @@ TASKS = [
     ("sepsis_bundle",             "Hard",   [0, 1]),
     ("paediatric_triage",         "Hard",   [0, 2]),
     ("medication_reconciliation", "Hard",   [0, 3]),
+    ("icu_deterioration",         "Hard",   [0, 1]),
+    ("sbar_handover",             "Medium", [0, 1]),
+    ("differential_diagnosis",    "Hard",   [0, 1]),
 ]
 
 MAX_STEPS = 5

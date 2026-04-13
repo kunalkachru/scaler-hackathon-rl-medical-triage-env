@@ -788,6 +788,12 @@ Total: 0-2=low 3-4=medium 5-6=high ≥7=critical. Any single param=3 → minimum
             'Return: {"priority":"low|medium|high|critical","age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<int>,"critical_sign":"<vital>","recommended_action":"routine_monitoring|urgent_review|emergency_response","confidence":<0-1>,"rationale":"<age-appropriate PEWS reasoning>"}',
         "medication_reconciliation":
             'Return: {"issues_found":["<issue1>","<issue2>"],"severity":"low|medium|high|critical","requires_pharmacist":true|false,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","drug_to_withhold":"<drug or null>","confidence":<0-1>,"rationale":"<evidence-based reasoning>"}',
+        "icu_deterioration":
+            'Return: {"sofa_score":<int 0-24>,"primary_organ_failure":"respiratory|cardiovascular|renal|hepatic|neurological|coagulation","deterioration_trend":"worsening|stable|improving","intervention":"emergency_escalation|increase_support|maintain_current|prepare_palliation","rationale":"<SOFA reasoning>"}',
+        "sbar_handover":
+            'Return: {"escalation_required":true|false,"priority":"low|medium|high|critical","assessment":"<clinical summary>","recommendation":"emergency_response|urgent_review|routine_monitoring","rationale":"<SBAR reasoning>"}',
+        "differential_diagnosis":
+            'Return: {"must_not_miss":"<diagnosis>","top_diagnosis":"<diagnosis>","differentials":["<dx1>","<dx2>","<dx3>"],"first_investigation":"<investigation>","urgency":"immediate|urgent|routine","rationale":"<safety-net reasoning>"}',
     }
 
     task_hint = TASK_PROMPTS.get(request.task_id, TASK_PROMPTS["simple_triage"])
@@ -833,6 +839,9 @@ def _mock_agent_response(task_id: str) -> dict:
         "sepsis_bundle":             {"priority": "critical", "bundle_elements": ["blood_cultures", "broad_spectrum_antibiotics", "iv_fluid_bolus", "lactate_measurement"], "antibiotic_choice": "piperacillin_tazobactam", "fluid_volume_ml": 2000, "vasopressor_indicated": False, "confidence": 0.6, "rationale": "Mock agent: standard sepsis bundle"},
         "paediatric_triage":         {"priority": "high", "age_group": "school_age", "pews_score": 5, "critical_sign": "spo2", "recommended_action": "urgent_review", "confidence": 0.6, "rationale": "Mock agent: paediatric PEWS elevated"},
         "medication_reconciliation":  {"issues_found": ["drug_interaction"], "severity": "high", "requires_pharmacist": True, "recommended_action": "withhold_drug", "drug_to_withhold": "", "confidence": 0.5, "rationale": "Mock agent: potential drug interaction detected"},
+        "icu_deterioration":          {"sofa_score": 8, "primary_organ_failure": "respiratory", "deterioration_trend": "worsening", "intervention": "increase_support", "rationale": "Mock agent: SOFA rising, respiratory failure dominant"},
+        "sbar_handover":              {"escalation_required": True, "priority": "high", "assessment": "Deteriorating patient, escalation required", "recommendation": "urgent_review", "rationale": "Mock agent: clinical concern identified"},
+        "differential_diagnosis":     {"must_not_miss": "stemi", "top_diagnosis": "acute_coronary_syndrome", "differentials": ["pulmonary_embolism", "aortic_dissection"], "first_investigation": "ecg", "urgency": "immediate", "rationale": "Mock agent: chest pain with cardiac risk factors"},
     }
     return mocks.get(task_id, mocks["simple_triage"])
 
@@ -935,6 +944,9 @@ input,textarea{width:100%;padding:8px 10px;border-radius:6px;border:1px solid va
         <option value="sepsis_bundle">🧬 Sepsis Bundle (Hard, Clinical Decision)</option>
         <option value="paediatric_triage">👶 Paediatric Triage PEWS (Hard)</option>
         <option value="medication_reconciliation">💊 Medication Reconciliation (Hard)</option>
+        <option value="icu_deterioration">🏥 ICU Deterioration SOFA (Hard)</option>
+        <option value="sbar_handover">📞 SBAR Clinical Handover (Medium)</option>
+        <option value="differential_diagnosis">🔍 Differential Diagnosis Safety-Net (Hard)</option>
       </select>
       <select id="case-select"><option value="">Random case</option></select>
       <div id="case-select-hint" style="font-size:12px;color:var(--muted);margin:-4px 0 8px">Select a case index, then click <strong style="color:#e8eaf0">New Patient Case</strong> to load that patient.</div>
@@ -1325,6 +1337,31 @@ function buildForm(tid) {
       <div class="full"><label>Rationale (cite evidence e.g. BMJ 2005, NPSA 2006)</label><textarea id="f-rationale" rows="3" placeholder="Warfarin + NSAID: BMJ 2005 — 3× bleeding risk. Withhold ibuprofen..."></textarea></div>
       <div><label>Confidence (0-1)</label><input type="number" id="f-confidence" min="0" max="1" step="0.1" value="0.75"></div>
     `;
+  } else if (tid === "icu_deterioration") {
+    el.innerHTML = `
+      <div><label>SOFA Score (0–24)</label><input type="number" id="f-sofa" min="0" max="24" placeholder="0-24"></div>
+      <div><label>Primary Organ Failure</label><select id="f-organ"><option value="">--</option><option value="respiratory">Respiratory</option><option value="cardiovascular">Cardiovascular</option><option value="renal">Renal</option><option value="hepatic">Hepatic</option><option value="neurological">Neurological</option><option value="coagulation">Coagulation</option></select></div>
+      <div><label>Deterioration Trend</label><select id="f-trend"><option value="">--</option><option value="worsening">Worsening</option><option value="stable">Stable</option><option value="improving">Improving</option></select></div>
+      <div><label>Intervention</label><select id="f-intervention"><option value="">--</option><option value="emergency_escalation">Emergency Escalation</option><option value="increase_support">Increase Support</option><option value="maintain_current">Maintain Current</option><option value="prepare_palliation">Prepare Palliation</option></select></div>
+      <div class="full"><label>Rationale (cite SOFA score, trend, organ failure)</label><textarea id="f-rationale" rows="3" placeholder="SOFA=10, rising from 6 in 8hrs. Cardiovascular: MAP=58 despite vasopressors..."></textarea></div>
+    `;
+  } else if (tid === "sbar_handover") {
+    el.innerHTML = `
+      <div><label>Escalation Required</label><select id="f-escalation"><option value="">--</option><option value="true">Yes — escalate</option><option value="false">No — routine</option></select></div>
+      <div><label>Priority</label><select id="f-priority"><option value="">--</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></div>
+      <div class="full"><label>Assessment Summary</label><textarea id="f-assessment" rows="2" placeholder="e.g. Post-operative sepsis. NEWS2=13 critical. Hypoxia, hypotension, confusion."></textarea></div>
+      <div><label>Recommendation</label><select id="f-recommendation"><option value="">--</option><option value="emergency_response">Emergency Response (come now)</option><option value="urgent_review">Urgent Review</option><option value="routine_monitoring">Routine Monitoring</option></select></div>
+      <div class="full"><label>Rationale</label><textarea id="f-rationale" rows="2" placeholder="Justify escalation decision based on SBAR findings..."></textarea></div>
+    `;
+  } else if (tid === "differential_diagnosis") {
+    el.innerHTML = `
+      <div><label>Must-Not-Miss Diagnosis</label><input id="f-must-not-miss" placeholder="e.g. stemi, subarachnoid_haemorrhage, hypoglycaemia"></div>
+      <div><label>Top Diagnosis</label><input id="f-top-dx" placeholder="e.g. acute_coronary_syndrome"></div>
+      <div class="full"><label>Differentials (comma-separated, 2–4)</label><input id="f-differentials" placeholder="e.g. pulmonary_embolism, aortic_dissection, pericarditis"></div>
+      <div><label>First Investigation</label><input id="f-investigation" placeholder="e.g. ecg, ct_head, blood_glucose, ct_angiography"></div>
+      <div><label>Urgency</label><select id="f-urgency"><option value="">--</option><option value="immediate">Immediate</option><option value="urgent">Urgent</option><option value="routine">Routine</option></select></div>
+      <div class="full"><label>Rationale (safety-net reasoning)</label><textarea id="f-rationale" rows="2" placeholder="Must not miss STEMI — time critical. ECG fastest diagnostic. Equal BPs argue against dissection..."></textarea></div>
+    `;
   } else {
     const isFairness = tid === "demographic_fairness";
     el.innerHTML = `
@@ -1392,6 +1429,26 @@ function buildAction() {
     if (pharm !== "") a.requires_pharmacist = (pharm === "true");
     if (dw) a.drug_to_withhold = dw;
     return a;
+  }
+  if (tid === "icu_deterioration") {
+    const a = {primary_organ_failure: gv("f-organ"), deterioration_trend: gv("f-trend"),
+               intervention: gv("f-intervention"), rationale: gv("f-rationale")};
+    const sofa = gv("f-sofa"); if (sofa) a.sofa_score = parseInt(sofa);
+    return a;
+  }
+  if (tid === "sbar_handover") {
+    const esc = gv("f-escalation");
+    const a = {priority: gv("f-priority"), assessment: gv("f-assessment"),
+               recommendation: gv("f-recommendation"), rationale: gv("f-rationale")};
+    if (esc !== "") a.escalation_required = (esc === "true");
+    return a;
+  }
+  if (tid === "differential_diagnosis") {
+    const diffsRaw = gv("f-differentials");
+    const diffs = diffsRaw ? diffsRaw.split(",").map(x=>x.trim()).filter(Boolean) : [];
+    return {must_not_miss: gv("f-must-not-miss"), top_diagnosis: gv("f-top-dx"),
+            differentials: diffs, first_investigation: gv("f-investigation"),
+            urgency: gv("f-urgency"), rationale: gv("f-rationale")};
   }
   const a = {priority: gv("f-priority"), recommended_action: gv("f-action"),
               rationale: gv("f-rationale"), confidence: parseFloat(gv("f-confidence")||"0.8")};
@@ -1553,6 +1610,22 @@ async function aiFill() {
       set("f-action", s.recommended_action || "");
       if (s.requires_pharmacist != null) set("f-pharmacist", s.requires_pharmacist ? "true" : "false");
       if (s.drug_to_withhold) set("f-drug-withhold", s.drug_to_withhold);
+    } else if (tid === "icu_deterioration") {
+      if (s.sofa_score != null) set("f-sofa", s.sofa_score);
+      set("f-organ", s.primary_organ_failure || "");
+      set("f-trend", s.deterioration_trend || "");
+      set("f-intervention", s.intervention || "");
+    } else if (tid === "sbar_handover") {
+      if (s.escalation_required != null) set("f-escalation", s.escalation_required ? "true" : "false");
+      set("f-priority", s.priority || "");
+      set("f-assessment", s.assessment || "");
+      set("f-recommendation", s.recommendation || "");
+    } else if (tid === "differential_diagnosis") {
+      set("f-must-not-miss", s.must_not_miss || "");
+      set("f-top-dx", s.top_diagnosis || "");
+      if (s.differentials) set("f-differentials", (s.differentials||[]).join(", "));
+      set("f-investigation", s.first_investigation || "");
+      set("f-urgency", s.urgency || "");
     } else {
       set("f-priority", s.priority || "");
       set("f-news2", s.news2_score ?? "");

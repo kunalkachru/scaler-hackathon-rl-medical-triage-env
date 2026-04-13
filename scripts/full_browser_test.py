@@ -1,5 +1,5 @@
 """
-Full browser + API test for all 8 tasks and all enhancement cases.
+Full browser + API test for all 11 tasks and all enhancement cases.
 Tests every case via API and runs browser smoke checks per task.
 
 Usage:
@@ -59,15 +59,16 @@ def test_health():
     r = api("get", "/health")
     data = r.json()
     record("health returns 200", r.status_code == 200)
-    record("version is 2.2.0", data.get("version") == "2.2.0", data.get("version"))
+    record("version is 2.3.0", data.get("version") == "2.3.0", data.get("version"))
     record("status healthy", data.get("status") == "healthy")
 
     r2 = api("get", "/tasks")
     tasks = r2.json()
     expected = {"simple_triage","conflicting_vitals","masked_deterioration",
                 "demographic_fairness","deteriorating_patient","sepsis_bundle",
-                "paediatric_triage","medication_reconciliation"}
-    record("all 8 tasks present", expected.issubset(tasks.keys()))
+                "paediatric_triage","medication_reconciliation",
+                "icu_deterioration","sbar_handover","differential_diagnosis"}
+    record("all 11 tasks present", expected.issubset(tasks.keys()))
 
     # Case counts
     counts = {k: len(v["case_ids"]) for k, v in tasks.items()}
@@ -346,10 +347,76 @@ def test_medication_reconciliation():
         ok = reward >= 0.6
         record(f"MR case_index={idx} ({case_id}) reward≥0.6", ok, f"reward={reward:.4f}")
 
-# ── Section 10: Browser UI checks per task ────────────────────────────────────
+# ── Section 10: ICU Deterioration — all 4 cases ──────────────────────────────
+
+IC_ANSWERS = {
+    0: {"sofa_score": 10, "primary_organ_failure": "cardiovascular", "deterioration_trend": "worsening",  "intervention": "emergency_escalation"},
+    1: {"sofa_score": 3,  "primary_organ_failure": "renal",          "deterioration_trend": "stable",     "intervention": "maintain_current"},
+    2: {"sofa_score": 8,  "primary_organ_failure": "respiratory",    "deterioration_trend": "worsening",  "intervention": "increase_support"},
+    3: {"sofa_score": 18, "primary_organ_failure": "neurological",   "deterioration_trend": "worsening",  "intervention": "prepare_palliation"},
+}
+
+def test_icu_deterioration():
+    section("10. ICU Deterioration — all 4 cases (IC001–IC004)")
+    sid = "browser-test-ic"
+    for idx in range(4):
+        ans = IC_ANSWERS[idx]
+        obs = reset("icu_deterioration", idx, session_id=f"{sid}-{idx}")
+        case_id = obs["observation"]["case_id"]
+        result = step(f"{sid}-{idx}", ans)
+        reward = result["reward"]
+        ok = reward >= 0.5
+        record(f"IC case_index={idx} ({case_id}) reward≥0.5", ok, f"reward={reward:.4f}")
+
+
+# ── Section 11: SBAR Handover — all 4 cases ──────────────────────────────────
+
+SH_ANSWERS = {
+    0: {"escalation_required": True,  "priority": "critical", "assessment": "Post-operative sepsis. NEWS2=13 critical.",          "recommendation": "emergency_response"},
+    1: {"escalation_required": False, "priority": "low",      "assessment": "Improving CAP. NEWS2=1. CRP trending down.",         "recommendation": "routine_monitoring"},
+    2: {"escalation_required": True,  "priority": "critical", "assessment": "Inferior STEMI. ST elevation II/III/aVF.",           "recommendation": "emergency_response"},
+    3: {"escalation_required": False, "priority": "low",      "assessment": "Routine post-colonoscopy. NEWS2=0. No red flags.",   "recommendation": "routine_monitoring"},
+}
+
+def test_sbar_handover():
+    section("11. SBAR Handover — all 4 cases (SH001–SH004)")
+    sid = "browser-test-sh"
+    for idx in range(4):
+        ans = SH_ANSWERS[idx]
+        obs = reset("sbar_handover", idx, session_id=f"{sid}-{idx}")
+        case_id = obs["observation"]["case_id"]
+        result = step(f"{sid}-{idx}", ans)
+        reward = result["reward"]
+        ok = reward >= 0.6
+        record(f"SH case_index={idx} ({case_id}) reward≥0.6", ok, f"reward={reward:.4f}")
+
+
+# ── Section 12: Differential Diagnosis — all 4 cases ─────────────────────────
+
+DD_ANSWERS = {
+    0: {"must_not_miss": "stemi",                    "top_diagnosis": "acute_coronary_syndrome",   "differentials": ["pulmonary_embolism","aortic_dissection","pericarditis"],           "first_investigation": "ecg",            "urgency": "immediate"},
+    1: {"must_not_miss": "subarachnoid_haemorrhage", "top_diagnosis": "subarachnoid_haemorrhage", "differentials": ["meningitis","migraine","hypertensive_crisis"],                     "first_investigation": "ct_head",        "urgency": "immediate"},
+    2: {"must_not_miss": "abdominal_aortic_aneurysm","top_diagnosis": "abdominal_aortic_aneurysm","differentials": ["mesenteric_ischaemia","renal_colic","bowel_obstruction"],          "first_investigation": "ct_angiography", "urgency": "immediate"},
+    3: {"must_not_miss": "hypoglycaemia",            "top_diagnosis": "hypoglycaemia",            "differentials": ["stroke","sepsis","opioid_toxicity","encephalopathy"],              "first_investigation": "blood_glucose",  "urgency": "immediate"},
+}
+
+def test_differential_diagnosis():
+    section("12. Differential Diagnosis — all 4 cases (DD001–DD004)")
+    sid = "browser-test-dd"
+    for idx in range(4):
+        ans = DD_ANSWERS[idx]
+        obs = reset("differential_diagnosis", idx, session_id=f"{sid}-{idx}")
+        case_id = obs["observation"]["case_id"]
+        result = step(f"{sid}-{idx}", ans)
+        reward = result["reward"]
+        ok = reward >= 0.6
+        record(f"DD case_index={idx} ({case_id}) reward≥0.6", ok, f"reward={reward:.4f}")
+
+
+# ── Section 13: Browser UI checks per task ────────────────────────────────────
 
 def test_browser_ui():
-    section("10. Browser UI — all 8 tasks auto-fill + submit")
+    section("13. Browser UI — all 11 tasks auto-fill + submit")
     web_url = BASE_URL + "/web"
 
     TASKS = [
@@ -361,6 +428,9 @@ def test_browser_ui():
         ("sepsis_bundle",            "Sepsis Hour-1 Bundle"),
         ("paediatric_triage",        "Paediatric Triage (PEWS)"),
         ("medication_reconciliation","Medication Reconciliation"),
+        ("icu_deterioration",        "ICU Deterioration (SOFA)"),
+        ("sbar_handover",            "SBAR Clinical Handover"),
+        ("differential_diagnosis",   "Differential Diagnosis (Safety-Net)"),
     ]
 
     with sync_playwright() as p:
@@ -462,10 +532,10 @@ def test_browser_ui():
 
         browser.close()
 
-# ── Section 11: Synonym normalization spot-checks via API ─────────────────────
+# ── Section 14: Synonym normalization spot-checks via API ─────────────────────
 
 def test_synonyms():
-    section("11. Synonym Normalization — frontier LLM-style outputs get credit")
+    section("14. Synonym Normalization — frontier LLM-style outputs get credit")
     sid = "browser-test-syn"
 
     # "respiratory rate" (space) should match "respiratory_rate"
@@ -514,10 +584,10 @@ def test_synonyms():
     score = result.get("reward", 0)
     record("synonym: 'oxygen saturation' → spo2 in misleading_signs", score >= 0.5, f"reward={score:.4f}")
 
-# ── Section 12: Reward boundary — never exactly 0 or 1 ───────────────────────
+# ── Section 15: Reward boundary — never exactly 0 or 1 ───────────────────────
 
 def test_reward_boundaries():
-    section("12. Reward Boundary — open interval (0.0001, 0.9999)")
+    section("15. Reward Boundary — open interval (0.0001, 0.9999)")
     sid = "browser-test-bnd"
 
     # Perfect answer → should be 0.9999 not 1.0
@@ -559,6 +629,9 @@ def main():
     test_sepsis_bundle()
     test_paediatric_triage()
     test_medication_reconciliation()
+    test_icu_deterioration()
+    test_sbar_handover()
+    test_differential_diagnosis()
     test_browser_ui()
     test_synonyms()
     test_reward_boundaries()

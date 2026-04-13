@@ -136,4 +136,46 @@ assert not missing, f"Missing metrics keys: {missing}"
 print("  ok: keys present; total_episodes=", d.get("total_episodes"))
 PY
 
+echo "[11/13] ICU Deterioration — reset + step smoke"
+IC_SESSION_ID="live-verify-ic-$(date +%s)"
+post_json "/reset" "{\"task_id\":\"icu_deterioration\",\"case_index\":1,\"session_id\":\"$IC_SESSION_ID\"}" "$tmpdir/ic_reset.json"
+post_json "/step" "{\"session_id\":\"$IC_SESSION_ID\",\"action\":{\"sofa_score\":3,\"primary_organ_failure\":\"renal\",\"deterioration_trend\":\"stable\",\"intervention\":\"maintain_current\"}}" "$tmpdir/ic_step.json"
+python - <<'PY' "$tmpdir/ic_reset.json" "$tmpdir/ic_step.json"
+import json, sys
+r=json.load(open(sys.argv[1]))
+s=json.load(open(sys.argv[2]))
+assert r.get("observation",{}).get("task_id")=="icu_deterioration", f"Wrong task: {r.get('observation',{}).get('task_id')}"
+reward=s.get("reward",0)
+assert reward > 0.5, f"ICU correct answer should score >0.5, got {reward}"
+print(f"  ok: IC002 reward={reward}")
+PY
+
+echo "[12/13] SBAR Handover — reset + step smoke"
+SH_SESSION_ID="live-verify-sh-$(date +%s)"
+post_json "/reset" "{\"task_id\":\"sbar_handover\",\"case_index\":1,\"session_id\":\"$SH_SESSION_ID\"}" "$tmpdir/sh_reset.json"
+post_json "/step" "{\"session_id\":\"$SH_SESSION_ID\",\"action\":{\"escalation_required\":false,\"priority\":\"low\",\"assessment\":\"Improving CAP. NEWS2=1.\",\"recommendation\":\"routine_monitoring\"}}" "$tmpdir/sh_step.json"
+python - <<'PY' "$tmpdir/sh_reset.json" "$tmpdir/sh_step.json"
+import json, sys
+r=json.load(open(sys.argv[1]))
+s=json.load(open(sys.argv[2]))
+assert r.get("observation",{}).get("task_id")=="sbar_handover", f"Wrong task: {r.get('observation',{}).get('task_id')}"
+reward=s.get("reward",0)
+assert reward > 0.5, f"SBAR correct answer should score >0.5, got {reward}"
+print(f"  ok: SH002 reward={reward}")
+PY
+
+echo "[13/13] Differential Diagnosis — reset + step smoke"
+DD_SESSION_ID="live-verify-dd-$(date +%s)"
+post_json "/reset" "{\"task_id\":\"differential_diagnosis\",\"case_index\":0,\"session_id\":\"$DD_SESSION_ID\"}" "$tmpdir/dd_reset.json"
+post_json "/step" "{\"session_id\":\"$DD_SESSION_ID\",\"action\":{\"must_not_miss\":\"stemi\",\"top_diagnosis\":\"acute_coronary_syndrome\",\"differentials\":[\"pulmonary_embolism\",\"aortic_dissection\",\"pericarditis\"],\"first_investigation\":\"ecg\",\"urgency\":\"immediate\"}}" "$tmpdir/dd_step.json"
+python - <<'PY' "$tmpdir/dd_reset.json" "$tmpdir/dd_step.json"
+import json, sys
+r=json.load(open(sys.argv[1]))
+s=json.load(open(sys.argv[2]))
+assert r.get("observation",{}).get("task_id")=="differential_diagnosis", f"Wrong task: {r.get('observation',{}).get('task_id')}"
+reward=s.get("reward",0)
+assert reward > 0.6, f"DiffDx correct answer should score >0.6, got {reward}"
+print(f"  ok: DD001 reward={reward}")
+PY
+
 echo "[live-verify] PASS: all endpoint checks succeeded."

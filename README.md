@@ -551,7 +551,7 @@ python inference.py
 
 The script:
 1. Starts the FastAPI server as a subprocess on port 8000
-2. Runs the LLM agent against 2 cases per task (16 total, 8 tasks)
+2. Runs the LLM agent against 2 cases per task (22 total, 11 tasks)
 3. Scores each response using deterministic graders
 4. Emits organizer-mandated structured logs per episode:
    - `[START] task=<...> env=<...> model=<...>`
@@ -743,7 +743,7 @@ medical-triage-env/
 ├── server/
 │   ├── app.py                ← FastAPI server — all endpoints + session manager + episode history
 │   ├── medical_triage_environment.py  ← Core environment state machine (reset/step/state)
-│   ├── cases.py              ← Patient case bank (63 cases across 8 tasks)
+│   ├── cases.py              ← Patient case bank (75 cases across 11 tasks)
 │   ├── graders.py            ← Deterministic graders: NEWS2, fairness, deterioration
 │   ├── requirements.txt      ← Server dependencies (fastapi, uvicorn, pydantic, openai)
 │   └── __init__.py

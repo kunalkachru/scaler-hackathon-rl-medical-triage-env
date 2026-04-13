@@ -18,12 +18,14 @@ name: medical_triage_env
 version: "2.3.0"
 description: >
   An OpenEnv RL environment for clinical triage. An AI agent reads patient cases
-  and performs triage using NHS NEWS2 and PEWS. Eight tasks of increasing difficulty and
+  and performs triage using NHS NEWS2, PEWS, and SOFA. Eleven tasks of increasing difficulty and
   real-world clinical fidelity: simple triage, conflicting vitals, masked
   deterioration (pharmacological masking), demographic fairness (bias detection),
   deteriorating patient (multi-turn escalation), sepsis bundle compliance
   (Surviving Sepsis Campaign Hour-1 Bundle), paediatric triage (PEWS age-specific
-  thresholds), and medication reconciliation (drug interactions, dosing errors).
+  thresholds), medication reconciliation (drug interactions, dosing errors),
+  ICU deterioration (SOFA scoring), SBAR clinical handover (communication safety),
+  and differential diagnosis (must-not-miss safety-net framework).
   All graders are deterministic, using peer-reviewed clinical protocols.
   Research-grounded: addresses documented harms from Mount Sinai (1.7M LLM outputs),
   Oxford Medical School, Bordeaux University Hospital, MIMIC-III deterioration studies,

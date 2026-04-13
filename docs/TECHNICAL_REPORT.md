@@ -312,7 +312,7 @@ Drive (every 10 steps) and pushed to `kunalkachru23/grpo-medical-triage-qwen1.5b
 | `deteriorating_patient` | 0.30 | **0.30** | ≈0 | Multi-turn reward sparse |
 
 Run 2 confirms GRPO training with this environment produces **real learning signal**:
-5 of 8 tasks improved, sepsis_bundle went from 0.0001 → 0.66 (zero to non-trivial
+5 of 11 tasks improved, sepsis_bundle went from 0.0001 → 0.66 (zero to non-trivial
 in 128 steps). The adapter at `kunalkachru23/grpo-medical-triage-qwen1.5b` is
 published and reproducible.
 
@@ -378,8 +378,8 @@ reward function incentivises vitals-only decision-making, penalising demographic
 | `tests/test_inference_contract.py` | Inference pipeline contract |
 | `tests/test_v2_enhancements.py` | Fairness, confidence, synonyms, multi-turn |
 
-Full browser + API test: `scripts/full_browser_test.py` — 97 checks across all 8
-original tasks, synonym acceptance, reward boundary validation, new endpoints.
+Full browser + API test: `scripts/full_browser_test.py` — 112 checks across all 11
+tasks, synonym acceptance, reward boundary validation, new endpoints.
 
 ### 7.3 Performance
 

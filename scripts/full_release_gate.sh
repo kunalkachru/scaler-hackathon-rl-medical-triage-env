@@ -290,6 +290,9 @@ fi
 [[ -f "./scripts/browser_ui_smoke.py" ]] || { echo "[release-gate] Missing ./scripts/browser_ui_smoke.py"; exit 2; }
 [[ -f "./scripts/validate-submission.sh" ]] || { echo "[release-gate] Missing ./scripts/validate-submission.sh"; exit 2; }
 
+step "Coverage parity check (every task covered in all artifacts)"
+run_cmd python scripts/check_coverage.py
+
 step "Local regression (pytest + validate + pre_submit_check)"
 run_cmd pytest tests/ -q
 run_cmd openenv validate
