@@ -94,6 +94,32 @@ For medication_reconciliation, respond with:
   - ACE inhibitor + potassium-sparing diuretic = hyperkalaemia risk, especially in CKD
   - Morphine accumulates in renal failure (eGFR <30) — use oxycodone at reduced dose instead
   - NEVER give penicillin-class antibiotics (amoxicillin, piperacillin) with documented penicillin anaphylaxis
+
+For icu_deterioration, respond with:
+  {"sofa_score":<int 0-24>,"primary_organ_failure":"cardiovascular|respiratory|renal|hepatic|neurological|coagulation","deterioration_trend":"improving|stable|worsening","intervention":"maintain_current|increase_support|emergency_escalation|prepare_palliation","rationale":"<reasoning>"}
+  CRITICAL RULES for icu_deterioration:
+  - SOFA score: each organ system 0-4; total 0-24. Score ≥2 = organ dysfunction, ≥11 = very high mortality.
+  - Cardiovascular: MAP <70 or vasopressors = failure. Respiratory: PaO2/FiO2 <300 = failure.
+  - Renal: creatinine >171 or UO <500ml/day = failure. Neurological: GCS <15 = failure.
+  - Trend: compare current to previous — improving/stable/worsening based on trajectory.
+  - emergency_escalation if SOFA ≥11 or acute deterioration; prepare_palliation if futile care ceiling reached.
+
+For sbar_handover, respond with:
+  {"escalation_required":true|false,"priority":"low|medium|high|critical","assessment":"<brief clinical summary>","recommendation":"routine_monitoring|urgent_review|emergency_response"}
+  CRITICAL RULES for sbar_handover:
+  - escalation_required=true if: GCS drop ≥2, MAP <65, RR >25, SpO2 <92%, new organ failure, or NEWS2 ≥7.
+  - emergency_response if immediate threat to life (arrest, impending respiratory failure, shock).
+  - urgent_review if deteriorating but not immediately life-threatening (NEWS2 5-6, single organ concern).
+  - assessment must mention the key clinical finding driving the recommendation.
+
+For differential_diagnosis, respond with:
+  {"must_not_miss":"<life-threatening diagnosis>","top_diagnosis":"<most likely>","differentials":["<dx1>","<dx2>","<dx3>"],"first_investigation":"<key test>","urgency":"immediate|urgent|routine"}
+  CRITICAL RULES for differential_diagnosis:
+  - must_not_miss is the life-threatening diagnosis that MUST be excluded first (e.g. stemi, subarachnoid_haemorrhage, aortic_dissection, pulmonary_embolism, abdominal_aortic_aneurysm, hypoglycaemia).
+  - top_diagnosis is the most clinically probable given the history and examination.
+  - differentials: list 3 alternative diagnoses beyond top_diagnosis.
+  - first_investigation: single most discriminating test (ecg, ct_head, ct_angiography, blood_glucose, d_dimer, troponin).
+  - urgency=immediate if must_not_miss requires treatment within minutes.
 """
 
 
