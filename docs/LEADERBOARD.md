@@ -10,17 +10,17 @@
 
 | Task | Difficulty | Llama-3.3-70B | Qwen2.5-72B | DeepSeek-R1-32B | Random Baseline |
 |---|---|---|---|---|---|
-| `simple_triage` | Easy | 0.832 | 0.795 | 0.600 | 0.296 |
-| `conflicting_vitals` | Medium | 0.514 | 0.538 | 0.225 | 0.319 |
-| `masked_deterioration` | Hard | 0.613 | 0.725 | 0.000 | 0.119 |
-| `demographic_fairness` | Medium | 0.820 | 0.410 | 0.410 | 0.438 |
-| `deteriorating_patient` | Hard | 0.750 | 1.000 | 0.500 | 0.050 |
-| `sepsis_bundle` | Hard | 0.935 | 0.935 | 0.000 | 0.571 |
-| `paediatric_triage` | Hard | 0.712 | 0.847 | 0.088 | 0.282 |
-| `medication_reconciliation` | Hard | 0.635 | 0.568 | 0.000 | 0.270 |
-| `icu_deterioration` | Hard | 0.760 | 0.885 | 0.000 | — |
-| `sbar_handover` | Medium | 0.951 | 1.000 | 0.063 | — |
-| `differential_diagnosis` | Hard | 0.920 | 0.444 | 0.000 | — |
+| `simple_triage` | Easy | 0.8320 | 0.7950 | 0.6000 | 0.2960 |
+| `conflicting_vitals` | Medium | 0.5140 | 0.5380 | 0.2250 | 0.3190 |
+| `masked_deterioration` | Hard | 0.6130 | 0.7250 | 0.0001 | 0.1190 |
+| `demographic_fairness` | Medium | 0.8200 | 0.4100 | 0.4100 | 0.4380 |
+| `deteriorating_patient` | Hard | 0.7500 | 0.9999 | 0.5000 | 0.0500 |
+| `sepsis_bundle` | Hard | 0.9350 | 0.9350 | 0.0001 | 0.5710 |
+| `paediatric_triage` | Hard | 0.7120 | 0.8470 | 0.0880 | 0.2820 |
+| `medication_reconciliation` | Hard | 0.6350 | 0.5680 | 0.0001 | 0.2700 |
+| `icu_deterioration` | Hard | 0.7600 | 0.8850 | 0.0001 | — |
+| `sbar_handover` | Medium | 0.9510 | 0.9999 | 0.0630 | — |
+| `differential_diagnosis` | Hard | 0.9200 | 0.4440 | 0.0001 | — |
 
 ## Overall Average
 

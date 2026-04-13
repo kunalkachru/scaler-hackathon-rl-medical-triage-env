@@ -136,13 +136,13 @@ def run_random_baseline(server_url: str) -> dict[str, list[float]]:
 
 
 def avg(scores: list[float]) -> float | None:
-    return round(sum(scores) / len(scores), 3) if scores else None
+    return round(sum(scores) / len(scores), 4) if scores else None
 
 
 def fmt(val: float | None) -> str:
     if val is None:
         return "—"
-    return f"{val:.3f}"
+    return f"{val:.4f}"
 
 
 def write_leaderboard(
