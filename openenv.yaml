@@ -15,7 +15,7 @@ tags:
   - bias-detection
 
 name: medical_triage_env
-version: "2.2.0"
+version: "2.3.0"
 description: >
   An OpenEnv RL environment for clinical triage. An AI agent reads patient cases
   and performs triage using NHS NEWS2 and PEWS. Eight tasks of increasing difficulty and
@@ -77,6 +77,24 @@ tasks:
     cases: 6
     research: "NPSA Safer Practice Notice 2006 (methotrexate); BNF; BMJ 2005 warfarin-NSAID bleeding risk 3×; MHRA AKI alerts"
 
+  - id: icu_deterioration
+    name: ICU Deterioration (SOFA)
+    difficulty: hard
+    cases: 4
+    research: "SOFA score — Vincent et al. 1996; ESICM Guidelines 2023; ICU mortality doubles per 2-point SOFA rise"
+
+  - id: sbar_handover
+    name: SBAR Clinical Handover
+    difficulty: medium
+    cases: 4
+    research: "NHS SBAR Framework 2018; ISBAR tool — Joint Commission 2017; 70% of sentinel events involve communication failures"
+
+  - id: differential_diagnosis
+    name: Differential Diagnosis (Safety-Net)
+    difficulty: hard
+    cases: 4
+    research: "Diagnostic error causes 40,000-80,000 deaths/year (BMJ 2021); must-not-miss framework — Murtagh's General Practice"
+
 endpoints:
   reset: POST /reset
   step: POST /step
@@ -91,4 +109,4 @@ endpoints:
 # Returned step/task scores are remapped to the open interval (0, 1); see models.task_score_for_api
 reward_range: [0.0001, 0.9999]
 max_steps_per_episode: 3
-total_cases: 63
+total_cases: 75

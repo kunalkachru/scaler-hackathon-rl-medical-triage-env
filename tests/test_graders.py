@@ -1108,3 +1108,258 @@ class TestMedicationReconciliationGrader:
         score, breakdown = grade_response_raw("medication_reconciliation", {}, case)
         assert isinstance(score, float)
         assert score < 0.15
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 9: ICU DETERIORATION GRADER TESTS
+# ─────────────────────────────────────────────────────────────
+
+from server.graders import grade_icu_deterioration, grade_sbar_handover, grade_differential_diagnosis
+from server.cases import ICU_DETERIORATION_CASES, SBAR_HANDOVER_CASES, DIFFERENTIAL_DIAGNOSIS_CASES
+
+
+class TestICUDeteriorationGrader:
+    """Tests for grade_icu_deterioration."""
+
+    def test_ic001_perfect_response(self):
+        """IC001 septic shock — perfect response scores high."""
+        case = next(c for c in ICU_DETERIORATION_CASES if c["case_id"] == "IC001")
+        response = {
+            "sofa_score": 10,
+            "primary_organ_failure": "cardiovascular",
+            "deterioration_trend": "worsening",
+            "intervention": "emergency_escalation",
+        }
+        score, breakdown = grade_icu_deterioration(response, case)
+        assert score >= 0.95, f"Perfect IC001 response should score ≥0.95, got {score}"
+
+    def test_ic004_palliation(self):
+        """IC004 multiorgan failure — prepare_palliation is correct."""
+        case = next(c for c in ICU_DETERIORATION_CASES if c["case_id"] == "IC004")
+        response = {
+            "sofa_score": 18,
+            "primary_organ_failure": "neurological",
+            "deterioration_trend": "worsening",
+            "intervention": "prepare_palliation",
+        }
+        score, breakdown = grade_icu_deterioration(response, case)
+        assert score >= 0.95, f"Perfect IC004 response should score ≥0.95, got {score}"
+
+    def test_wrong_intervention_penalised(self):
+        """Wrong intervention (maintain_current when emergency_escalation needed) scores low."""
+        case = next(c for c in ICU_DETERIORATION_CASES if c["case_id"] == "IC001")
+        response = {
+            "sofa_score": 10,
+            "primary_organ_failure": "cardiovascular",
+            "deterioration_trend": "worsening",
+            "intervention": "maintain_current",  # Wrong
+        }
+        score, breakdown = grade_icu_deterioration(response, case)
+        assert score <= 0.65, f"Wrong intervention should score ≤0.65, got {score}"
+        assert breakdown["intervention"] == 0.0
+
+    def test_sofa_off_by_one_partial_credit(self):
+        """SOFA off by 1 gives partial credit."""
+        case = next(c for c in ICU_DETERIORATION_CASES if c["case_id"] == "IC002")
+        response = {
+            "sofa_score": 4,  # True is 3 — off by 1
+            "primary_organ_failure": "renal",
+            "deterioration_trend": "stable",
+            "intervention": "maintain_current",
+        }
+        score, breakdown = grade_icu_deterioration(response, case)
+        assert breakdown["sofa_score"] > 0, "Off-by-1 SOFA should get partial credit"
+        assert score >= 0.80, f"Mostly correct IC002 should score ≥0.80, got {score}"
+
+    def test_synonym_organ_failure(self):
+        """Synonym 'cardiac' maps to 'cardiovascular'."""
+        case = next(c for c in ICU_DETERIORATION_CASES if c["case_id"] == "IC001")
+        response = {
+            "sofa_score": 10,
+            "primary_organ_failure": "cardiac",  # synonym
+            "deterioration_trend": "worsening",
+            "intervention": "emergency_escalation",
+        }
+        score, breakdown = grade_icu_deterioration(response, case)
+        assert breakdown["primary_organ_failure"] > 0, "Synonym 'cardiac' should map to 'cardiovascular'"
+
+    def test_empty_response_scores_zero(self):
+        """Empty response scores near zero."""
+        case = ICU_DETERIORATION_CASES[0]
+        score, breakdown = grade_icu_deterioration({}, case)
+        assert score < 0.1, f"Empty response should score < 0.1, got {score}"
+
+    def test_dispatch_icu_deterioration(self):
+        """grade_response_raw dispatches to grade_icu_deterioration."""
+        case = ICU_DETERIORATION_CASES[0]
+        score, breakdown = grade_response_raw("icu_deterioration", {}, case)
+        assert isinstance(score, float)
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 10: SBAR HANDOVER GRADER TESTS
+# ─────────────────────────────────────────────────────────────
+
+class TestSBARHandoverGrader:
+    """Tests for grade_sbar_handover."""
+
+    def test_sh001_critical_escalation(self):
+        """SH001 post-op sepsis — escalation required scores high."""
+        case = next(c for c in SBAR_HANDOVER_CASES if c["case_id"] == "SH001")
+        response = {
+            "escalation_required": True,
+            "priority": "critical",
+            "assessment": "post-operative sepsis, news2 high, hypotension, tachycardia, hypoxia",
+            "recommendation": "emergency_response",
+        }
+        score, breakdown = grade_sbar_handover(response, case)
+        assert score >= 0.80, f"SH001 good response should score ≥0.80, got {score}"
+
+    def test_sh002_routine_no_escalation(self):
+        """SH002 improving pneumonia — no escalation, routine monitoring."""
+        case = next(c for c in SBAR_HANDOVER_CASES if c["case_id"] == "SH002")
+        response = {
+            "escalation_required": False,
+            "priority": "low",
+            "assessment": "improving pneumonia, news2 stable, trending better",
+            "recommendation": "routine_monitoring",
+        }
+        score, breakdown = grade_sbar_handover(response, case)
+        assert score >= 0.80, f"SH002 good response should score ≥0.80, got {score}"
+
+    def test_missed_escalation_penalised(self):
+        """Saying escalation_required=False when True is a major penalty."""
+        case = next(c for c in SBAR_HANDOVER_CASES if c["case_id"] == "SH001")
+        response = {
+            "escalation_required": False,  # Wrong — patient is critical
+            "priority": "low",
+            "assessment": "patient looks ok",
+            "recommendation": "routine_monitoring",
+        }
+        score, breakdown = grade_sbar_handover(response, case)
+        assert score <= 0.30, f"Missed critical escalation should score ≤0.30, got {score}"
+        assert breakdown["escalation_required"] == 0.0
+
+    def test_escalation_bool_string_coercion(self):
+        """escalation_required='true' string is accepted."""
+        case = next(c for c in SBAR_HANDOVER_CASES if c["case_id"] == "SH001")
+        response = {
+            "escalation_required": "true",
+            "priority": "critical",
+            "assessment": "sepsis deterioration",
+            "recommendation": "emergency_response",
+        }
+        score, breakdown = grade_sbar_handover(response, case)
+        assert breakdown["escalation_required"] > 0, "String 'true' should be accepted as True"
+
+    def test_empty_response_scores_zero(self):
+        """Empty response scores near zero."""
+        case = SBAR_HANDOVER_CASES[0]
+        score, breakdown = grade_sbar_handover({}, case)
+        assert score < 0.1, f"Empty response should score < 0.1, got {score}"
+
+    def test_dispatch_sbar_handover(self):
+        """grade_response_raw dispatches to grade_sbar_handover."""
+        case = SBAR_HANDOVER_CASES[0]
+        score, breakdown = grade_response_raw("sbar_handover", {}, case)
+        assert isinstance(score, float)
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 11: DIFFERENTIAL DIAGNOSIS GRADER TESTS
+# ─────────────────────────────────────────────────────────────
+
+class TestDifferentialDiagnosisGrader:
+    """Tests for grade_differential_diagnosis."""
+
+    def test_dd001_stemi_perfect(self):
+        """DD001 chest pain — STEMI must not miss, perfect response."""
+        case = next(c for c in DIFFERENTIAL_DIAGNOSIS_CASES if c["case_id"] == "DD001")
+        response = {
+            "must_not_miss": "stemi",
+            "top_diagnosis": "acute_coronary_syndrome",
+            "differentials": ["pulmonary_embolism", "aortic_dissection", "pericarditis"],
+            "first_investigation": "ecg",
+            "urgency": "immediate",
+        }
+        score, breakdown = grade_differential_diagnosis(response, case)
+        assert score >= 0.95, f"Perfect DD001 response should score ≥0.95, got {score}"
+
+    def test_dd002_sah_perfect(self):
+        """DD002 thunderclap headache — SAH must not miss."""
+        case = next(c for c in DIFFERENTIAL_DIAGNOSIS_CASES if c["case_id"] == "DD002")
+        response = {
+            "must_not_miss": "subarachnoid_haemorrhage",
+            "top_diagnosis": "subarachnoid_haemorrhage",
+            "differentials": ["meningitis", "migraine", "hypertensive_crisis"],
+            "first_investigation": "ct_head",
+            "urgency": "immediate",
+        }
+        score, breakdown = grade_differential_diagnosis(response, case)
+        assert score >= 0.95, f"Perfect DD002 response should score ≥0.95, got {score}"
+
+    def test_dd004_hypoglycaemia_must_not_miss(self):
+        """DD004 — hypoglycaemia must not miss, blood glucose first investigation."""
+        case = next(c for c in DIFFERENTIAL_DIAGNOSIS_CASES if c["case_id"] == "DD004")
+        response = {
+            "must_not_miss": "hypoglycaemia",
+            "top_diagnosis": "hypoglycaemia",
+            "differentials": ["stroke", "sepsis"],
+            "first_investigation": "blood_glucose",
+            "urgency": "immediate",
+        }
+        score, breakdown = grade_differential_diagnosis(response, case)
+        assert score >= 0.80, f"Good DD004 response should score ≥0.80, got {score}"
+
+    def test_wrong_must_not_miss_major_penalty(self):
+        """Missing the must-not-miss diagnosis is the biggest penalty (40% weight)."""
+        case = next(c for c in DIFFERENTIAL_DIAGNOSIS_CASES if c["case_id"] == "DD001")
+        response = {
+            "must_not_miss": "pericarditis",  # Wrong — should be stemi
+            "top_diagnosis": "acute_coronary_syndrome",
+            "differentials": ["pulmonary_embolism", "aortic_dissection"],
+            "first_investigation": "ecg",
+            "urgency": "immediate",
+        }
+        score, breakdown = grade_differential_diagnosis(response, case)
+        assert breakdown["must_not_miss"] == 0.0
+        assert score <= 0.65, f"Wrong must_not_miss should score ≤0.65, got {score}"
+
+    def test_synonym_stemi_accepted(self):
+        """'myocardial infarction' synonym maps to stemi."""
+        case = next(c for c in DIFFERENTIAL_DIAGNOSIS_CASES if c["case_id"] == "DD001")
+        response = {
+            "must_not_miss": "myocardial infarction",  # synonym
+            "top_diagnosis": "acute coronary syndrome",
+            "differentials": ["pulmonary embolism", "aortic dissection"],
+            "first_investigation": "12-lead",  # synonym for ecg
+            "urgency": "immediate",
+        }
+        score, breakdown = grade_differential_diagnosis(response, case)
+        assert breakdown["must_not_miss"] > 0, "Synonym 'myocardial infarction' should map to stemi"
+        assert breakdown["first_investigation"] > 0, "Synonym '12-lead' should map to ecg"
+
+    def test_partial_differentials_credit(self):
+        """Getting 2 of 3 differentials right gives partial credit."""
+        case = next(c for c in DIFFERENTIAL_DIAGNOSIS_CASES if c["case_id"] == "DD001")
+        response = {
+            "must_not_miss": "stemi",
+            "top_diagnosis": "acute_coronary_syndrome",
+            "differentials": ["pulmonary_embolism", "aortic_dissection"],  # 2/3 correct
+            "first_investigation": "ecg",
+            "urgency": "immediate",
+        }
+        score, breakdown = grade_differential_diagnosis(response, case)
+        assert 0.0 < breakdown["differentials"] < 0.20, "2/3 differentials should give partial credit"
+
+    def test_empty_response_scores_zero(self):
+        """Empty response scores near zero."""
+        case = DIFFERENTIAL_DIAGNOSIS_CASES[0]
+        score, breakdown = grade_differential_diagnosis({}, case)
+        assert score < 0.1, f"Empty response should score < 0.1, got {score}"
+
+    def test_dispatch_differential_diagnosis(self):
+        """grade_response_raw dispatches to grade_differential_diagnosis."""
+        case = DIFFERENTIAL_DIAGNOSIS_CASES[0]
+        score, breakdown = grade_response_raw("differential_diagnosis", {}, case)
+        assert isinstance(score, float)

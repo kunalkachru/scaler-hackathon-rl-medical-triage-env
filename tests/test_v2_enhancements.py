@@ -509,7 +509,7 @@ class TestAllFiveTasksIntegration:
     def test_all_tasks_listed_in_available_tasks(self):
         env = MedicalTriageEnvironment()
         r = env.reset()
-        assert len(r.observation.available_tasks) == 8
+        assert len(r.observation.available_tasks) == 11
 
     def test_case_counts(self):
 

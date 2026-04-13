@@ -1459,3 +1459,427 @@ def grade_medication_reconciliation(
 
 
 GRADER_MAP["medication_reconciliation"] = grade_medication_reconciliation
+
+
+# ─────────────────────────────────────────────────────────────
+# ICU ORGAN FAILURE + INTERVENTION SYNONYM MAPS
+# ─────────────────────────────────────────────────────────────
+
+_ORGAN_FAILURE_SYNONYMS: dict[str, list[str]] = {
+    "respiratory":    ["lungs", "pulmonary", "breathing", "ards", "respiratory failure"],
+    "cardiovascular": ["cardiac", "haemodynamic", "hemodynamic", "circulatory", "shock", "cardiovascular failure"],
+    "renal":          ["kidney", "renal failure", "aki", "acute kidney injury", "ckd"],
+    "hepatic":        ["liver", "liver failure", "hepatic failure"],
+    "neurological":   ["brain", "neuro", "cns", "consciousness", "neurological failure", "gcs"],
+    "coagulation":    ["clotting", "coagulopathy", "dic", "disseminated intravascular"],
+}
+_ORGAN_NORM: dict[str, str] = {}
+for _canon, _syns in _ORGAN_FAILURE_SYNONYMS.items():
+    _ORGAN_NORM[_canon] = _canon
+    for _s in _syns:
+        _ORGAN_NORM[_s.lower()] = _canon
+
+
+def _normalize_organ_failure(s: str) -> str:
+    if not s:
+        return s
+    low = s.lower().strip()
+    if low in _ORGAN_NORM:
+        return _ORGAN_NORM[low]
+    underscored = low.replace(" ", "_").replace("-", "_")
+    if underscored in _ORGAN_NORM:
+        return _ORGAN_NORM[underscored]
+    return low
+
+
+_ICU_INTERVENTION_SYNONYMS: dict[str, list[str]] = {
+    "emergency_escalation": [
+        "emergency escalation", "emergency response", "urgent escalation",
+        "code", "crash call", "activate emergency", "immediate escalation",
+    ],
+    "increase_support": [
+        "increase support", "escalate support", "increase treatment",
+        "intensify", "upgrade", "escalate therapy", "more support",
+    ],
+    "maintain_current": [
+        "maintain current", "continue current", "no change", "monitor",
+        "watchful waiting", "continue management", "status quo",
+    ],
+    "prepare_palliation": [
+        "prepare palliation", "comfort care", "palliate", "withdrawal",
+        "end of life", "palliation", "goals of care", "withdraw treatment",
+        "withdraw life sustaining", "comfort measures",
+    ],
+}
+_ICU_INT_NORM: dict[str, str] = {}
+for _canon, _syns in _ICU_INTERVENTION_SYNONYMS.items():
+    _ICU_INT_NORM[_canon] = _canon
+    for _s in _syns:
+        _ICU_INT_NORM[_s.lower()] = _canon
+
+
+def _normalize_icu_intervention(s: str) -> str:
+    if not s:
+        return s
+    low = s.lower().strip()
+    if low in _ICU_INT_NORM:
+        return _ICU_INT_NORM[low]
+    underscored = low.replace(" ", "_").replace("-", "_")
+    if underscored in _ICU_INT_NORM:
+        return _ICU_INT_NORM[underscored]
+    return low
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 9 GRADER: ICU Deterioration
+# ─────────────────────────────────────────────────────────────
+
+def grade_icu_deterioration(agent_response: dict[str, Any], case: dict[str, Any]) -> tuple[float, dict]:
+    """
+    Grade an ICU deterioration assessment.
+
+    Agent must provide:
+      - intervention: emergency_escalation | increase_support | maintain_current | prepare_palliation
+      - sofa_score: int (0-24)
+      - primary_organ_failure: str
+      - deterioration_trend: worsening | stable | improving
+
+    Scoring (total = 1.0):
+      0.35 — correct intervention (safety-critical decision)
+      0.25 — SOFA score accuracy (±1=1.0, ±2=0.5, ±3=0.25, else 0.0)
+      0.25 — correct primary organ failure
+      0.15 — correct deterioration trend
+    """
+    gt = case["ground_truth"]
+    breakdown = {}
+    total = 0.0
+
+    # 1. Intervention (0.35)
+    agent_int = _normalize_icu_intervention(agent_response.get("intervention") or "")
+    expected_int = gt["intervention"]
+    intervention_score = 1.0 if agent_int == expected_int else 0.0
+    breakdown["intervention"] = round(intervention_score * 0.35, 3)
+    total += breakdown["intervention"]
+
+    # 2. SOFA score (0.25)
+    try:
+        agent_sofa = int(agent_response.get("sofa_score", -99))
+        true_sofa = case["sofa_score"]
+        delta = abs(agent_sofa - true_sofa)
+        if delta == 0:
+            sofa_score = 1.0
+        elif delta <= 1:
+            sofa_score = 0.7
+        elif delta <= 2:
+            sofa_score = 0.4
+        elif delta <= 3:
+            sofa_score = 0.2
+        else:
+            sofa_score = 0.0
+    except (TypeError, ValueError):
+        sofa_score = 0.0
+    breakdown["sofa_score"] = round(sofa_score * 0.25, 3)
+    total += breakdown["sofa_score"]
+
+    # 3. Primary organ failure (0.25)
+    agent_organ = _normalize_organ_failure(agent_response.get("primary_organ_failure") or "")
+    expected_organ = _normalize_organ_failure(case["primary_organ_failure"])
+    organ_score = 1.0 if agent_organ == expected_organ else 0.0
+    breakdown["primary_organ_failure"] = round(organ_score * 0.25, 3)
+    total += breakdown["primary_organ_failure"]
+
+    # 4. Deterioration trend (0.15)
+    agent_trend = (agent_response.get("deterioration_trend") or "").lower().strip()
+    expected_trend = gt["deterioration_trend"].lower()
+    trend_score = 1.0 if agent_trend == expected_trend else 0.0
+    breakdown["deterioration_trend"] = round(trend_score * 0.15, 3)
+    total += breakdown["deterioration_trend"]
+
+    breakdown["feedback"] = (
+        f"intervention={'correct' if intervention_score else 'wrong'}; "
+        f"sofa_delta={abs(int(agent_response.get('sofa_score', 0) or 0) - case['sofa_score'])}; "
+        f"organ={'correct' if organ_score else 'wrong'}; "
+        f"trend={'correct' if trend_score else 'wrong'}"
+    )
+    return round(total, 4), breakdown
+
+
+GRADER_MAP["icu_deterioration"] = grade_icu_deterioration
+
+
+# ─────────────────────────────────────────────────────────────
+# SBAR INVESTIGATION + RECOMMENDATION SYNONYM MAPS
+# ─────────────────────────────────────────────────────────────
+
+_SBAR_REC_SYNONYMS: dict[str, list[str]] = {
+    "emergency_response": [
+        "emergency response", "activate emergency", "call emergency team",
+        "immediate response", "crash call", "code blue", "emergency",
+    ],
+    "urgent_review": [
+        "urgent review", "urgent assessment", "come now", "immediate review",
+        "escalate", "urgent escalation", "come immediately",
+    ],
+    "routine_monitoring": [
+        "routine monitoring", "routine observations", "continue monitoring",
+        "standard care", "no immediate action", "normal obs", "no escalation",
+    ],
+}
+_SBAR_REC_NORM: dict[str, str] = {}
+for _canon, _syns in _SBAR_REC_SYNONYMS.items():
+    _SBAR_REC_NORM[_canon] = _canon
+    for _s in _syns:
+        _SBAR_REC_NORM[_s.lower()] = _canon
+
+
+def _normalize_sbar_recommendation(s: str) -> str:
+    if not s:
+        return s
+    low = s.lower().strip()
+    if low in _SBAR_REC_NORM:
+        return _SBAR_REC_NORM[low]
+    underscored = low.replace(" ", "_").replace("-", "_")
+    if underscored in _SBAR_REC_NORM:
+        return _SBAR_REC_NORM[underscored]
+    return low
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 10 GRADER: SBAR Handover
+# ─────────────────────────────────────────────────────────────
+
+def grade_sbar_handover(agent_response: dict[str, Any], case: dict[str, Any]) -> tuple[float, dict]:
+    """
+    Grade an SBAR handover evaluation.
+
+    Agent must provide:
+      - escalation_required: bool
+      - priority: low | medium | high | critical
+      - assessment: str (free text — graded by keyword overlap)
+      - recommendation: emergency_response | urgent_review | routine_monitoring
+
+    Scoring (total = 1.0):
+      0.40 — escalation_required correct (bool — patient safety)
+      0.25 — priority correct (priority_distance)
+      0.20 — assessment quality (keyword overlap vs expected terms)
+      0.15 — recommendation correct
+    """
+    gt = case["ground_truth"]
+    breakdown = {}
+    total = 0.0
+
+    # 1. Escalation required (0.40) — safety-critical bool
+    agent_esc = agent_response.get("escalation_required")
+    expected_esc = case["escalation_required"]
+    # Accept both bool and string "true"/"false"
+    if isinstance(agent_esc, str):
+        agent_esc = agent_esc.lower().strip() in ("true", "yes", "1")
+    esc_score = 1.0 if agent_esc == expected_esc else 0.0
+    breakdown["escalation_required"] = round(esc_score * 0.40, 3)
+    total += breakdown["escalation_required"]
+
+    # 2. Priority (0.25)
+    predicted_priority = (agent_response.get("priority") or "").lower().strip()
+    priority_score = priority_distance(predicted_priority, case["expected_priority"])
+    breakdown["priority"] = round(priority_score * 0.25, 3)
+    total += breakdown["priority"]
+
+    # 3. Assessment quality (0.20) — keyword overlap
+    agent_assessment = (agent_response.get("assessment") or "").lower()
+    key_terms = case.get("key_assessment_terms", [])
+    if key_terms:
+        hits = sum(1 for term in key_terms if term.lower() in agent_assessment)
+        keyword_score = min(1.0, hits / max(1, len(key_terms) * 0.4))
+    else:
+        keyword_score = 0.5
+    breakdown["assessment"] = round(keyword_score * 0.20, 3)
+    total += breakdown["assessment"]
+
+    # 4. Recommendation (0.15)
+    agent_rec = _normalize_sbar_recommendation(agent_response.get("recommendation") or "")
+    expected_rec = gt["recommendation"]
+    rec_score = 1.0 if agent_rec == expected_rec else 0.0
+    breakdown["recommendation"] = round(rec_score * 0.15, 3)
+    total += breakdown["recommendation"]
+
+    breakdown["feedback"] = (
+        f"escalation={'correct' if esc_score else 'wrong'}; "
+        f"priority={'correct' if priority_score == 1.0 else 'partial' if priority_score > 0 else 'wrong'}; "
+        f"assessment_keywords={hits if key_terms else 'n/a'}/{len(key_terms) if key_terms else 0}; "
+        f"recommendation={'correct' if rec_score else 'wrong'}"
+    )
+    return round(total, 4), breakdown
+
+
+GRADER_MAP["sbar_handover"] = grade_sbar_handover
+
+
+# ─────────────────────────────────────────────────────────────
+# DIFFERENTIAL DIAGNOSIS SYNONYM MAPS
+# ─────────────────────────────────────────────────────────────
+
+_DIAGNOSIS_SYNONYMS: dict[str, list[str]] = {
+    "stemi": [
+        "stemi", "st elevation mi", "st elevation myocardial infarction",
+        "myocardial infarction", "heart attack", "mi", "acute mi",
+        "acute coronary syndrome", "acs",
+    ],
+    "acute_coronary_syndrome": [
+        "acs", "acute coronary syndrome", "nstemi", "unstable angina",
+        "coronary syndrome",
+    ],
+    "pulmonary_embolism": ["pe", "pulmonary embolism", "pulmonary embolus", "lung clot"],
+    "aortic_dissection": ["aortic dissection", "dissection", "type a dissection", "type b dissection"],
+    "pericarditis": ["pericarditis", "pericardial", "pericardial inflammation"],
+    "subarachnoid_haemorrhage": [
+        "sah", "subarachnoid haemorrhage", "subarachnoid hemorrhage",
+        "subarachnoid bleed", "brain bleed", "cerebral haemorrhage",
+    ],
+    "meningitis": ["meningitis", "bacterial meningitis", "meningococcal"],
+    "migraine": ["migraine", "migraine headache", "migrainous"],
+    "hypertensive_crisis": [
+        "hypertensive crisis", "hypertensive emergency", "malignant hypertension",
+        "hypertensive urgency",
+    ],
+    "abdominal_aortic_aneurysm": [
+        "aaa", "abdominal aortic aneurysm", "ruptured aaa",
+        "ruptured aortic aneurysm", "aortic aneurysm",
+    ],
+    "mesenteric_ischaemia": [
+        "mesenteric ischaemia", "mesenteric ischemia", "bowel ischaemia",
+        "mesenteric infarction",
+    ],
+    "renal_colic": ["renal colic", "ureteric colic", "kidney stone", "nephrolithiasis"],
+    "bowel_obstruction": ["bowel obstruction", "intestinal obstruction", "ileus"],
+    "hypoglycaemia": [
+        "hypoglycaemia", "hypoglycemia", "low blood sugar", "low glucose",
+        "hypo", "insulinoma", "insulin overdose",
+    ],
+    "stroke": ["stroke", "cva", "tia", "cerebral infarction", "ischaemic stroke", "haemorrhagic stroke"],
+    "sepsis": ["sepsis", "septicaemia", "septicemia", "severe infection"],
+    "opioid_toxicity": ["opioid toxicity", "opiate toxicity", "opioid overdose", "narcotic overdose"],
+    "encephalopathy": ["encephalopathy", "hepatic encephalopathy", "uraemic encephalopathy", "metabolic encephalopathy"],
+}
+_DIAGNOSIS_NORM: dict[str, str] = {}
+for _canon, _syns in _DIAGNOSIS_SYNONYMS.items():
+    _DIAGNOSIS_NORM[_canon] = _canon
+    for _s in _syns:
+        _DIAGNOSIS_NORM[_s.lower()] = _canon
+
+
+def _normalize_diagnosis(s: str) -> str:
+    if not s:
+        return s
+    low = s.lower().strip()
+    if low in _DIAGNOSIS_NORM:
+        return _DIAGNOSIS_NORM[low]
+    underscored = low.replace(" ", "_").replace("-", "_")
+    if underscored in _DIAGNOSIS_NORM:
+        return _DIAGNOSIS_NORM[underscored]
+    spaced = low.replace("_", " ").replace("-", " ")
+    if spaced in _DIAGNOSIS_NORM:
+        return _DIAGNOSIS_NORM[spaced]
+    return low
+
+
+_INVESTIGATION_SYNONYMS: dict[str, list[str]] = {
+    "ecg": ["ecg", "ekg", "electrocardiogram", "12-lead", "12 lead ecg", "ecg trace"],
+    "ct_head": ["ct head", "ct brain", "brain ct", "non-contrast ct", "ct scan head"],
+    "ct_angiography": ["ct angiography", "cta", "ct angio", "ct with contrast", "ct aortogram"],
+    "blood_glucose": [
+        "blood glucose", "glucose", "capillary glucose", "bgl", "cbg",
+        "blood sugar", "fingerprick glucose", "point of care glucose",
+    ],
+    "troponin": ["troponin", "high sensitivity troponin", "hs troponin"],
+    "chest_xray": ["chest xray", "cxr", "chest x-ray", "chest radiograph"],
+    "lumbar_puncture": ["lumbar puncture", "lp", "csf", "spinal tap"],
+}
+_INV_NORM: dict[str, str] = {}
+for _canon, _syns in _INVESTIGATION_SYNONYMS.items():
+    _INV_NORM[_canon] = _canon
+    for _s in _syns:
+        _INV_NORM[_s.lower()] = _canon
+
+
+def _normalize_investigation(s: str) -> str:
+    if not s:
+        return s
+    low = s.lower().strip()
+    if low in _INV_NORM:
+        return _INV_NORM[low]
+    underscored = low.replace(" ", "_").replace("-", "_")
+    if underscored in _INV_NORM:
+        return _INV_NORM[underscored]
+    spaced = low.replace("_", " ").replace("-", " ")
+    if spaced in _INV_NORM:
+        return _INV_NORM[spaced]
+    return low
+
+
+# ─────────────────────────────────────────────────────────────
+# TASK 11 GRADER: Differential Diagnosis
+# ─────────────────────────────────────────────────────────────
+
+def grade_differential_diagnosis(agent_response: dict[str, Any], case: dict[str, Any]) -> tuple[float, dict]:
+    """
+    Grade a differential diagnosis assessment.
+
+    Agent must provide:
+      - must_not_miss: str (the diagnosis that cannot be missed — safety critical)
+      - top_diagnosis: str (most likely diagnosis)
+      - differentials: list[str] (other diagnoses to consider)
+      - first_investigation: str (single most important test)
+      - urgency: immediate | urgent | routine
+
+    Scoring (total = 1.0):
+      0.40 — must_not_miss correct (safety-critical)
+      0.25 — top_diagnosis correct
+      0.20 — differentials overlap (Jaccard-like partial credit)
+      0.15 — first_investigation correct
+    """
+    gt = case["ground_truth"]
+    breakdown = {}
+    total = 0.0
+
+    # 1. Must-not-miss (0.40) — safety critical, highest weight
+    agent_mnm = _normalize_diagnosis(agent_response.get("must_not_miss") or "")
+    expected_mnm = _normalize_diagnosis(case["must_not_miss_diagnosis"])
+    mnm_score = 1.0 if agent_mnm == expected_mnm else 0.0
+    breakdown["must_not_miss"] = round(mnm_score * 0.40, 3)
+    total += breakdown["must_not_miss"]
+
+    # 2. Top diagnosis (0.25)
+    agent_top = _normalize_diagnosis(agent_response.get("top_diagnosis") or "")
+    expected_top = _normalize_diagnosis(case["top_diagnosis"])
+    top_score = 1.0 if agent_top == expected_top else 0.0
+    breakdown["top_diagnosis"] = round(top_score * 0.25, 3)
+    total += breakdown["top_diagnosis"]
+
+    # 3. Differentials overlap (0.20) — partial credit for each correct differential
+    agent_diffs = [_normalize_diagnosis(d) for d in (agent_response.get("differentials") or [])]
+    expected_diffs = set(_normalize_diagnosis(d) for d in case["expected_differentials"])
+    if expected_diffs:
+        hits = sum(1 for d in agent_diffs if d in expected_diffs)
+        diff_score = min(1.0, hits / len(expected_diffs))
+    else:
+        diff_score = 1.0 if not agent_diffs else 0.0
+    breakdown["differentials"] = round(diff_score * 0.20, 3)
+    total += breakdown["differentials"]
+
+    # 4. First investigation (0.15)
+    agent_inv = _normalize_investigation(agent_response.get("first_investigation") or "")
+    expected_inv = _normalize_investigation(case["expected_first_investigation"])
+    inv_score = 1.0 if agent_inv == expected_inv else 0.0
+    breakdown["first_investigation"] = round(inv_score * 0.15, 3)
+    total += breakdown["first_investigation"]
+
+    breakdown["feedback"] = (
+        f"must_not_miss={'correct' if mnm_score else 'wrong'}; "
+        f"top_diagnosis={'correct' if top_score else 'wrong'}; "
+        f"differentials={hits if expected_diffs else 0}/{len(expected_diffs)}; "
+        f"first_investigation={'correct' if inv_score else 'wrong'}"
+    )
+    return round(total, 4), breakdown
+
+
+GRADER_MAP["differential_diagnosis"] = grade_differential_diagnosis

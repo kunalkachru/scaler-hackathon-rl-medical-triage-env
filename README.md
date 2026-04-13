@@ -20,9 +20,9 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **Live HF Space** | https://huggingface.co/spaces/kunalkachru23/medical-triage-env |
 | **API base URL** | https://kunalkachru23-medical-triage-env.hf.space |
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
-| **Version** | v2.2.0 |
-| **Tasks** | 8 (63 cases) |
-| **Tests** | 167 passing |
+| **Version** | v2.3.0 |
+| **Tasks** | 11 (75 cases) |
+| **Tests** | 188 passing |
 | **RL Dataset** | https://huggingface.co/datasets/kunalkachru23/medical-triage-triples |
 
 ### Try it in 30 seconds (Evaluator quick path)
@@ -36,11 +36,12 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 **Key API endpoints:**
 ```bash
 curl https://kunalkachru23-medical-triage-env.hf.space/health
-# → {"status":"healthy","version":"2.2.0"}
+# → {"status":"healthy","version":"2.3.0"}
 
 curl https://kunalkachru23-medical-triage-env.hf.space/tasks | jq 'keys'
 # → ["conflicting_vitals","demographic_fairness","deteriorating_patient",
-#    "masked_deterioration","medication_reconciliation","paediatric_triage",
+#    "differential_diagnosis","icu_deterioration","masked_deterioration",
+#    "medication_reconciliation","paediatric_triage","sbar_handover",
 #    "sepsis_bundle","simple_triage"]
 
 # Compute NEWS2 from raw vitals

@@ -311,6 +311,9 @@ def main():
         ("sepsis_bundle",            "Hard",   [0, 1]),   # SB001 (shock+vasopressors) + SB002 (no shock)
         ("paediatric_triage",        "Hard",   [0, 2]),   # PD001 infant bronchiolitis + PD003 paediatric DKA
         ("medication_reconciliation","Hard",   [0, 3]),   # MR001 warfarin-NSAID + MR004 methotrexate overdose
+        ("icu_deterioration",        "Hard",   [0, 1]),   # IC001 septic shock worsening + IC002 post-op AKI stable
+        ("sbar_handover",            "Medium", [0, 1]),   # SH001 critical post-op sepsis + SH002 routine pneumonia
+        ("differential_diagnosis",   "Hard",   [0, 1]),   # DD001 STEMI + DD002 SAH
     ]
 
     for task_id, _difficulty, case_indices in TASKS:

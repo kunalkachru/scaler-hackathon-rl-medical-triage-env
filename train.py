@@ -63,6 +63,9 @@ TRAINING_TASKS = [
     ("sepsis_bundle",            0),  # SB001 — septic shock, full Hour-1 bundle
     ("paediatric_triage",        0),  # PD001 — infant bronchiolitis, PEWS
     ("medication_reconciliation", 0), # MR001 — warfarin + NSAID interaction
+    ("icu_deterioration",        0),  # IC001 — septic shock worsening, SOFA=14
+    ("sbar_handover",            0),  # SH001 — post-op sepsis critical handover
+    ("differential_diagnosis",   0),  # DD001 — chest pain, STEMI must-not-miss
 ]
 
 TEMPERATURE = 0.2   # small noise to allow variation across reps
