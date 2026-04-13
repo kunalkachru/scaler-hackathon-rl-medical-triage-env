@@ -38,3 +38,9 @@ include = ["server*"]
 
 [project.scripts]
 server = "server.app:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "static: tests that parse source files with no server required (fast, CI-safe)",
+    "live: tests that require a local server running on :8000",
+]
