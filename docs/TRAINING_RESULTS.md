@@ -1,5 +1,48 @@
 # Training Results
 
+---
+
+## GRPO Fine-tuning — Run 3 (Qwen2.5-1.5B-Instruct)
+
+**Model:** `Qwen/Qwen2.5-1.5B-Instruct` + LoRA (r=16, α=32)
+**Adapter:** `kunalkachru23/grpo-medical-triage-qwen1.5b`
+**Config:** 11 tasks × 8 prompts = 88 prompts | 2 epochs | 170 steps | G=4
+**Date:** 2026-04-13 | Reward oracle: production HF Space
+
+### Per-task Mean Reward (from training log)
+
+| Task | Mean Reward | Peak | Notes |
+|---|---|---|---|
+| `demographic_fairness` | ~0.47 | 0.88 | Best performer — frequent 0.67+ hits |
+| `paediatric_triage` | ~0.41 | 0.77 | Strong — consistent 0.52-0.77 |
+| `sepsis_bundle` | ~0.38 | 0.65 | Good — bundle elements learned |
+| `medication_reconciliation` | ~0.32 | 0.62 | Improving — severity/action fields |
+| `simple_triage` | ~0.28 | 0.75 | Solid baseline |
+| `conflicting_vitals` | ~0.27 | 0.44 | Moderate |
+| `icu_deterioration` | ~0.21 | 0.67 | High variance — SOFA scoring sporadic |
+| `masked_deterioration` | ~0.18 | 0.30 | Weak — masking drug field rarely correct |
+| `sbar_handover` | ~0.19 | 0.97 | Bimodal — either floor or near-perfect |
+| `deteriorating_patient` | ~0.12 | 0.9999 | Unstable — multi-turn hard for 1.5B |
+| `differential_diagnosis` | ~0.05 | 0.47 | Weakest — must_not_miss reasoning needs larger model |
+| **Overall** | **~0.27** | | vs random baseline ~0.29 (random had valid JSON always) |
+
+### Loss trajectory (170 steps)
+
+Steps 1–40: Loss oscillated ±0.2 (exploration phase)
+Steps 40–90: Loss stabilised, positive reward signal emerging on simple_triage, paediatric, sepsis
+Steps 90–170: Consistent learning — demographic_fairness, sepsis_bundle, medication_reconciliation showing repeated 0.4–0.7 rewards
+
+### Key observations
+
+- **1.5B model ceiling**: `differential_diagnosis` and `sbar_handover` require multi-step clinical reasoning that a 1.5B parameter model cannot reliably perform. Larger model (7B+) needed for these tasks.
+- **Format learning confirmed**: Tasks with strict but learnable schemas (paediatric_triage, sepsis_bundle) show clear reward improvement vs floor.
+- **Bimodal reward pattern** on new tasks (ICU/SBAR) indicates format is being learned intermittently — more training steps would consolidate this.
+- **Run 2 → Run 3 improvement**: Run 2 trained on 8 tasks with corrupted observations (`patient_history` bug). Run 3 fixes both: all 11 tasks with correct observations.
+
+---
+
+## RL Training Loop — Llama-3.3-70B-Instruct (via HF Router)
+
 Model: `meta-llama/Llama-3.3-70B-Instruct`  |  Reps per task: 3
 
 
