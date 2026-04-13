@@ -5,6 +5,11 @@ Fine-tunes Qwen2.5-1.5B-Instruct (or any causal LM) using Group Relative
 Policy Optimization (GRPO) via TRL. The live HF Space is used as the
 reward oracle — no local server needed.
 
+Covers all 11 clinical tasks (v2.3.0):
+  simple_triage, conflicting_vitals, masked_deterioration, demographic_fairness,
+  deteriorating_patient, sepsis_bundle, paediatric_triage, medication_reconciliation,
+  icu_deterioration, sbar_handover, differential_diagnosis
+
 Designed to run on:
   - Google Colab free tier (T4 GPU, 15GB VRAM) — default
   - Apple M4 Pro (MPS backend) — pass --device mps --no-quantize
@@ -12,7 +17,7 @@ Designed to run on:
 
 Usage (Colab):
   !pip install trl>=0.12.0 transformers accelerate bitsandbytes peft datasets requests -q
-  !python grpo_train.py
+  !python grpo_train.py --push-to-hub kunalkachru23/grpo-medical-triage-qwen1.5b
 
 Usage (M4 Pro — conda grpo-train env with Python 3.12):
   python grpo_train.py --device mps --no-quantize
@@ -46,6 +51,9 @@ TASKS = [
     "sepsis_bundle",
     "paediatric_triage",
     "medication_reconciliation",
+    "icu_deterioration",
+    "sbar_handover",
+    "differential_diagnosis",
 ]
 
 SYSTEM_PROMPT = """\
@@ -78,6 +86,24 @@ medication_reconciliation:
 "requires_pharmacist":<bool>,\
 "recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review",\
 "drug_to_withhold":"<string>","rationale":"<string>","confidence":<0.0-1.0>}
+
+icu_deterioration:
+{"sofa_score":<int 0-24>,"primary_organ_failure":"cardiovascular|respiratory|renal|hepatic|neurological|coagulation",\
+"deterioration_trend":"improving|stable|worsening",\
+"intervention":"maintain_current|increase_support|emergency_escalation|prepare_palliation",\
+"rationale":"<string>"}
+
+sbar_handover:
+{"escalation_required":<bool>,"priority":"low|medium|high|critical",\
+"assessment":"<string describing clinical situation>",\
+"recommendation":"routine_monitoring|urgent_review|emergency_response"}
+
+differential_diagnosis:
+{"must_not_miss":"<string — life-threatening diagnosis to exclude>",\
+"top_diagnosis":"<string — most likely diagnosis>",\
+"differentials":["<string>","<string>","<string>"],\
+"first_investigation":"<string — most important first test>",\
+"urgency":"immediate|urgent|routine"}
 
 Respond with JSON only. No preamble, no markdown code fences."""
 
@@ -169,7 +195,8 @@ def build_dataset(server_url: str, prompts_per_task: int) -> Dataset:
                     timeout=30,
                 )
                 r.raise_for_status()
-                obs = r.json()["observation"]["patient_presentation"]
+                obs_data = r.json()["observation"]
+                obs = obs_data.get("patient_history") or obs_data.get("patient_presentation", "")
                 records.append({"prompt": f"[TASK: {task}]\n\n{obs}", "task": task})
                 successes += 1
             except Exception as exc:
