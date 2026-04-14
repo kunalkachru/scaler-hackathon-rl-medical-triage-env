@@ -29,6 +29,7 @@ Resume after an interrupted run:
 Env vars (optional overrides):
   SERVER_URL  — default: https://kunalkachru23-medical-triage-env.hf.space
   HF_TOKEN    — for pushing adapter to Hub (optional)
+  .env        — HF_TOKEN is auto-loaded from current working directory if present
 """
 
 import argparse
@@ -63,55 +64,51 @@ TASKS = [
 ]
 
 SYSTEM_PROMPT = """\
-You are a clinical triage AI assistant. Analyse the patient case and respond \
-with a valid JSON object matching the task format below.
+You are a clinical triage AI assistant.
+The user message begins with [TASK: <name>]. Respond with ONE single flat JSON object for that task only.
+No nested objects. No markdown. No code fences. No extra text.
+Always include every required key for that task; if uncertain, emit best-guess placeholder values instead of omitting keys.
 
-simple_triage / conflicting_vitals / masked_deterioration / demographic_fairness:
-{"priority":"low|medium|high|critical","news2_score":<int>,\
-"critical_sign":"<string>","recommended_action":"<string>",\
-"rationale":"<string>","confidence":<0.0-1.0>}
+If [TASK: simple_triage] or [TASK: conflicting_vitals] or [TASK: masked_deterioration] or [TASK: demographic_fairness]:
+{"priority":"low|medium|high|critical","news2_score":<integer 0-20>,\
+"critical_sign":"<most abnormal vital sign>","recommended_action":"emergency_response|urgent_review|routine_monitoring",\
+"rationale":"<str>","confidence":<0.0-1.0>}
 
-deteriorating_patient:
-{"action":"monitor|escalate|emergency_response",\
-"rationale":"<string>","confidence":<0.0-1.0>}
+If [TASK: deteriorating_patient]:
+{"action":"monitor|escalate|emergency_response","rationale":"<str>","confidence":<0.0-1.0>}
 
-sepsis_bundle:
+If [TASK: sepsis_bundle]:
 {"priority":"low|medium|high|critical",\
 "bundle_elements":["blood_cultures","broad_spectrum_antibiotics","iv_fluid_bolus","lactate_measurement","vasopressors"],\
-"antibiotic_choice":"<string>","fluid_volume_ml":<int>,\
-"vasopressor_indicated":<bool>,"rationale":"<string>","confidence":<0.0-1.0>}
+"antibiotic_choice":"<str>","fluid_volume_ml":<integer>,"vasopressor_indicated":<true|false>,\
+"rationale":"<str>","confidence":<0.0-1.0>}
 
-paediatric_triage:
+If [TASK: paediatric_triage]:
 {"priority":"low|medium|high|critical",\
-"age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<int>,\
-"critical_sign":"<string>","recommended_action":"<string>",\
-"rationale":"<string>","confidence":<0.0-1.0>}
+"age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<integer 0-13>,\
+"critical_sign":"<most abnormal vital sign>","recommended_action":"emergency_response|urgent_review|routine_monitoring",\
+"rationale":"<str>","confidence":<0.0-1.0>}
 
-medication_reconciliation:
-{"issues_found":["<string>"],"severity":"critical|high|medium|low",\
-"requires_pharmacist":<bool>,\
+If [TASK: medication_reconciliation]:
+{"issues_found":["<str>"],"severity":"critical|high|medium|low","requires_pharmacist":<true|false>,\
 "recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review",\
-"drug_to_withhold":"<string>","rationale":"<string>","confidence":<0.0-1.0>}
+"drug_to_withhold":"<drug name or none>","rationale":"<str>","confidence":<0.0-1.0>}
 
-icu_deterioration:
-{"sofa_score":<int 0-24>,"primary_organ_failure":"cardiovascular|respiratory|renal|hepatic|neurological|coagulation",\
+If [TASK: icu_deterioration]:
+{"sofa_score":<integer 0-24>,"primary_organ_failure":"cardiovascular|respiratory|renal|hepatic|neurological|coagulation",\
 "deterioration_trend":"improving|stable|worsening",\
 "intervention":"maintain_current|increase_support|emergency_escalation|prepare_palliation",\
-"rationale":"<string>"}
+"rationale":"<str>"}
 
-sbar_handover:
-{"escalation_required":<bool>,"priority":"low|medium|high|critical",\
+If [TASK: sbar_handover]:
+{"escalation_required":<true|false>,"priority":"low|medium|high|critical",\
 "assessment":"<string describing clinical situation>",\
 "recommendation":"routine_monitoring|urgent_review|emergency_response"}
 
-differential_diagnosis:
-{"must_not_miss":"<string — life-threatening diagnosis to exclude>",\
-"top_diagnosis":"<string — most likely diagnosis>",\
-"differentials":["<string>","<string>","<string>"],\
-"first_investigation":"<string — most important first test>",\
-"urgency":"immediate|urgent|routine"}
-
-Respond with JSON only. No preamble, no markdown code fences."""
+If [TASK: differential_diagnosis]:
+{"must_not_miss":"<life-threatening diagnosis to exclude>","top_diagnosis":"<most likely diagnosis>",\
+"differentials":["<str>","<str>","<str>"],"first_investigation":"<most important first test>",\
+"urgency":"immediate|urgent|routine"}"""
 
 DEFAULT_SERVER_URL = "https://kunalkachru23-medical-triage-env.hf.space"
 PRIORITY_MAP = {
@@ -148,6 +145,35 @@ URGENCY_MAP = {
     "medium": "routine",
     "low": "routine",
 }
+
+# ── Env loading ────────────────────────────────────────────────────────────────
+
+
+def load_hf_token_from_env(env_path: str = ".env") -> None:
+    """
+    Load only HF_TOKEN from a local .env file into process environment.
+    Existing environment variables are preserved (no override).
+    """
+    if not os.path.isfile(env_path):
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[len("export ") :].strip()
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key == "HF_TOKEN":
+                    os.environ.setdefault(key, value)
+    except Exception as exc:
+        print(f"[WARN] Could not parse {env_path}: {exc}")
+
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
@@ -513,6 +539,8 @@ def latest_checkpoint_path(output_dir: str) -> Optional[str]:
 
 
 def main():
+    # Support local .env workflows for HF_TOKEN in project root.
+    load_hf_token_from_env(".env")
     args = parse_args()
 
     print("=" * 60)
@@ -573,7 +601,8 @@ def main():
         learning_rate=1e-5,
         lr_scheduler_type="cosine",
         logging_steps=1,
-        save_steps=50,
+        save_steps=10,
+        save_total_limit=3,
         fp16=cuda_available,
         bf16=False,
         report_to="none",
