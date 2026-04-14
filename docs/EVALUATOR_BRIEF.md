@@ -51,6 +51,10 @@ Single-command go/no-go:
 ./scripts/final_submission_check.sh --base-url "https://<your-space>.hf.space" --repo-id "<user>/<space>" --expect-llm true
 ```
 
+Operational behavior:
+- Default behavior is a fresh full run.
+- If interrupted, rerun with `--resume` to continue incomplete stages.
+
 ## 5) Expected outputs
 
 - `check_coverage.py`: PASS (all tasks represented across required artifacts)

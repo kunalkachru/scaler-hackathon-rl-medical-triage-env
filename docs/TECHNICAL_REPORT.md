@@ -372,8 +372,7 @@ reward function incentivises vitals-only decision-making, penalising demographic
 
 - **Docker**: `Dockerfile` in `scaler-hackathon-rl-medical-triage-env/` is the canonical build
 - **Port**: 7860 (HF Spaces runtime), 8000 (local dev)
-- **HF Spaces**: Production at `kunalkachru23/medical-triage-env`, staging at
-  `kunalkachru23/medical-triage-env-staging-latest`
+- **HF Spaces**: Production at `kunalkachru23/medical-triage-env`; staging should be passed explicitly via `--repo-id` when needed
 - **RL Dataset**: 75 (observation, action, reward) triples at
   `kunalkachru23/medical-triage-triples` on HF Datasets
 - **GRPO Adapter**: `kunalkachru23/grpo-medical-triage-qwen1.5b` on HF Hub

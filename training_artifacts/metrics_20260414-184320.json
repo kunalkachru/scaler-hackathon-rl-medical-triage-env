@@ -1,0 +1,25 @@
+{
+  "generated_at": "20260414-184320",
+  "overall": {
+    "events": 176,
+    "mean_reward": 0.2545291201492794,
+    "floor_rate": 0.07954545454545454,
+    "error_rate": 0.0,
+    "source": "reconstructed_from_trainer_state",
+    "taskwise_available": false
+  },
+  "task_summary": [
+    {
+      "task": "unknown",
+      "n": 176,
+      "mean_reward": 0.254529,
+      "floor_rate": 0.079545,
+      "error_rate": 0.0
+    }
+  ],
+  "artifacts": {
+    "plot_png": "training_artifacts/training_report_clean_20260414-184320.png",
+    "task_csv": "training_artifacts/task_summary_20260414-184320.csv",
+    "metrics_json": "training_artifacts/metrics_20260414-184320.json"
+  }
+}

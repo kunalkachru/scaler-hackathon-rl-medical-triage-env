@@ -1,0 +1,14 @@
+{
+  "command": "- /Users/kunalkachru/scaler_rl_critical_care_enhancements/scaler-hackathon-rl-medical-triage-env/artifacts/gates/final_submission_check_summary.json passed 246  0 /Users/kunalkachru/scaler_rl_critical_care_enhancements/scaler-hackathon-rl-medical-triage-env/artifacts/gates/final_submission_check.checkpoint https://kunalkachru23-medical-triage-env-staging-latest.hf.space kunalkachru23/medical-triage-env-staging-latest",
+  "status": "passed",
+  "duration_sec": 246,
+  "timestamp_utc": "2026-04-14T22:37:46.672478+00:00",
+  "base_url": "https://kunalkachru23-medical-triage-env-staging-latest.hf.space",
+  "repo_id": "kunalkachru23/medical-triage-env-staging-latest",
+  "completed_stages": [
+    "coverage",
+    "pre_submit",
+    "full_browser",
+    "release_gate"
+  ]
+}

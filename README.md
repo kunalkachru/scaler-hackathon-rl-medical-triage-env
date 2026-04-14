@@ -512,6 +512,11 @@ chmod +x ./scripts/final_submission_check.sh
   --expect-llm true
 ```
 
+CI/resume behavior:
+- If interrupted externally (e.g., SIGTERM), the script retries a terminated stage once.
+- It writes stage checkpoints to `artifacts/gates/final_submission_check.checkpoint`.
+- Default behavior is a fresh full run; pass `--resume` to continue incomplete stages.
+
 Machine-readable gate artifacts are emitted to:
 - `artifacts/gates/pre_submit_check_summary.json`
 - `artifacts/gates/full_release_gate_summary.json`
