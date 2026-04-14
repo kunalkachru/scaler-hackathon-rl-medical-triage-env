@@ -1,4 +1,4 @@
-# v2.0.1 — grader fixes, 116 tests
+# v2.3.0 — 11 tasks / 75 cases / current full pytest suite
 fastapi==0.115.0
 uvicorn==0.30.6
 pydantic==2.8.2

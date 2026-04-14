@@ -1,32 +1,32 @@
 # Medical Triage Environment — Exhaustive Test Report
 
-**Date:** 2026-04-06 (full suite snapshot)  
-**Environment:** Medical Triage Environment v2.0.0  
+**Date:** 2026-04-14 (latest validated snapshot)  
+**Environment:** Medical Triage Environment v2.3.0  
 **Python:** 3.12.3 | **pytest:** 9.0.2  
 **Core Suite Tests:** 103 | **Passed:** 103 | **Failed:** 0  
-**Current Full Suite Status:** 119 passed (`pytest tests/ -q`)  
+**Current Full Suite Status:** 345 collected, 331 passed, 14 skipped (`pytest tests/ -q`)  
 **Core Suite Run time:** ~0.4s  
 
 > Note: This report is a deep-dive narrative for foundational grader/environment suites.  
-> For latest evaluator workflow and full project validation, use `docs/PROJECT_DOCUMENTATION.md` and run `pytest tests/ -q`.
+> For latest evaluator workflow and full project validation, use `README.md`, `docs/TECHNICAL_REPORT.md`, and run `pytest tests/ -q`.
 
-> **API vs grader scores:** `grade_response` / `grade_*` outputs stay in **`[0, 1]`**. The **`MedicalTriageEnvironment`** and **`/grade-fairness`** return **`reward` / `observation.score` in the open interval `(0, 1)`** (`task_score_for_api` in `models.py`). **`reset()`** still returns **`reward = 0.0`**. Narrative examples below mix internal magnitudes (e.g. “1.0”) with HTTP behaviour (e.g. “≈ 0.9999”); see current tests in `tests/test_environment.py` and `tests/test_api_contract.py`.
+> **API vs grader scores:** `grade_response` / `grade_*` outputs stay in **`[0, 1]`**. The **`MedicalTriageEnvironment`** and **`/grade-fairness`** return **`reward` / `observation.score` in the open interval `(0, 1)`** (`task_score_for_api` in `models.py`). `reset()` returns the open-interval floor (`0.0001`). Narrative examples below mix internal magnitudes (e.g. “1.0”) with HTTP behaviour (e.g. “≈ 0.9999”); see current tests in `tests/test_environment.py` and `tests/test_api_contract.py`.
 
 ---
 
 ## How to Run
 
 ```bash
-# From project root (full suite — 119 tests)
+# From project root (full suite)
 pytest tests/ -q
 
 # Core grader + environment suites only
 pytest tests/test_graders.py tests/test_environment.py -v
 
-# API contract tests (requires live server on localhost:8000)
+# API contract tests (uses FastAPI TestClient; no live server required)
 pytest tests/test_api_contract.py -v
 
-# UI contract test (requires live server on localhost:8000)
+# UI contract tests (uses FastAPI TestClient)
 pytest tests/test_ui_contract.py -v
 ```
 
@@ -869,28 +869,26 @@ Inconsistent (Black patient gets medium, unhoused gets low) → score < 0.60 ✅
 
 ---
 
-### Suite 15 — All 5 Tasks Integration (5 tests)
+### Suite 15 — Task Integration Notes (legacy section)
 
-All 5 tasks accessible via reset() ✅
-All 5 tasks listed in available_tasks ✅
-Case counts: 4+3+5+12+4 = 28 total ✅
-All tasks: env `step()` rewards in (0, 1) ✅
-v2 task descriptions present ✅
+This legacy section originally validated the first 5 tasks.
+Current runtime supports 11 tasks and 75 cases. Authoritative checks now live in:
+- `tests/test_app_coverage.py` (endpoint + task coverage)
+- `scripts/check_coverage.py` (artifact parity across 11 tasks)
+- `scripts/full_browser_test.py` (115/115 exhaustive checks)
 
 ---
 
-## Final Summary (v2)
+## Final Summary (v2.3)
 
 ```
-119 tests passed | 0 failed | 0 skipped
-Run time: ~0.23s
-
-v2 includes 5 tasks and additional API contract tests; detailed per-test sections below retain original sequencing.
-v2 (45 tests): 4 enhancements — asymmetric penalty, fairness, multi-turn, confidence + 5 regression tests (dead reward keys, news2_score values)
+345 tests collected | 331 passed | 14 skipped
+Runtime local/full gates: pytest + openenv validate + docker smoke ✅
+Staging gates: release gate + live verify + browser smoke + full browser suite ✅
 
 All OpenEnv spec requirements verified ✅
-All 5 tasks reachable and functional ✅
-Demographic fairness validated across 12 variant cases ✅
+All 11 tasks reachable and functional ✅
+Demographic fairness validated across variant groups ✅
 Multi-turn deterioration episodes tested end-to-end ✅
 Confidence calibration reward verified ✅
 Under-triage correctly penalized harder than over-triage ✅

@@ -195,6 +195,8 @@ def test_metrics_empty_state():
     data = r.json()
     assert "total_episodes" in data
     assert "active_sessions" in data
+    assert data["total_tasks_available"] == 11
+    assert data["total_cases_available"] == 75
     assert "by_task" in data
     assert "difficulty_gradient_verified" in data
 
@@ -485,6 +487,19 @@ def test_step_done_records_episode_history():
     # History should now have at least one episode
     hist = client.get("/history").json()
     assert hist["total"] >= 1
+
+def test_deteriorating_history_records_episode_cumulative_reward():
+    """Multi-turn episode history should store cumulative episode return."""
+    sid = "done-test-dt"
+    client.post("/reset", json={"task_id": "deteriorating_patient", "case_index": 0, "session_id": sid})
+    client.post("/step", json={"session_id": sid, "action": {"action": "monitor"}})
+    final = client.post("/step", json={"session_id": sid, "action": {"action": "escalate"}})
+    assert final.status_code == 200
+    info_cum = final.json()["info"].get("cumulative_reward")
+    hist = client.get("/history?limit=3").json()
+    assert hist["episodes"], "history should contain at least one episode"
+    assert hist["episodes"][-1]["task_id"] == "deteriorating_patient"
+    assert hist["episodes"][-1]["reward"] == min(0.9999, info_cum)
 
 def test_reset_session_isolation():
     """Two different session_ids must produce independent environments."""

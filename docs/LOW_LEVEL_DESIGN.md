@@ -274,36 +274,36 @@ Functional content:
 ### 4.12 Validation and test harness files
 
 `scripts/pre_submit_check.sh`:
-- runs full pytest (119 tests)
+- runs full pytest (`pytest tests/ -q`)
 - builds Docker image
 - checks container health
 - smoke-tests `/reset`
 - runs `openenv validate`
 
-`tests/test_graders.py` (31 tests):
+`tests/test_graders.py`:
 - unit-level grading correctness and NEWS2 boundary tests.
 - covers all scoring boundary values per NHS RCP 2017 spec.
 
-`tests/test_environment.py` (24 tests):
+`tests/test_environment.py`:
 - integration-level environment lifecycle and state tests.
 - reset, step, state, full episode flows.
 
-`tests/test_v2_enhancements.py` (44 tests):
+`tests/test_v2_enhancements.py`:
 - fairness parity, asymmetric priority distance, confidence calibration bonus, and multi-turn deterioration tests.
 - includes 16 adversarial robustness tests (null fields, wrong types, empty body, unknown fields).
 
-`tests/test_api_contract.py` (9 tests):
+`tests/test_api_contract.py`:
 - API parsing/contract checks for newer action fields.
-- requires live server on localhost:8000.
+- uses FastAPI `TestClient` (no live server required).
 
-`tests/test_ui_contract.py` (8 tests):
+`tests/test_ui_contract.py`:
 - UI DOM contract, session wiring, and UI regression guards for interactive hooks.
-- requires live server on localhost:8000.
+- uses FastAPI `TestClient` (no live server required).
 
-`tests/test_inference_contract.py` (3 tests):
+`tests/test_inference_contract.py`:
 - baseline inference reproducibility guards (symbol wiring + required env checks).
 
-**Total: 119 tests — all passing.**
+Latest local gate: **345 tests collected, 331 passed, 14 skipped.**
 
 ## 5) Cross-File Dependency Map
 

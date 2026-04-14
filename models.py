@@ -440,7 +440,7 @@ class ResetRequest(BaseModel):
     )
     session_id: Optional[str] = Field(
         default=None,
-        description="Session identifier for concurrent isolation. Returned by reset(); pass it to step() and state(). If omitted, a new session is created automatically."
+        description="Session identifier for concurrent isolation. Returned by reset(); pass it to step() and state(). If omitted, the legacy shared '_default' session is reset and reused."
     )
 
 

@@ -22,7 +22,7 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
 | **Version** | v2.3.0 |
 | **Tasks** | 11 (75 cases) |
-| **Tests** | 188 passing |
+| **Tests** | 345 collected (latest local run: 331 passed, 14 skipped) |
 | **RL Dataset** | https://huggingface.co/datasets/kunalkachru23/medical-triage-triples |
 
 ### Try it in 30 seconds (Evaluator quick path)
@@ -420,19 +420,24 @@ Task 6 (Sepsis Bundle):
 ## Running Tests
 
 ```bash
-# Full suite (152 tests)
+# Full suite
 venv/bin/python -m pytest tests/ -v
 
 # By module
-venv/bin/python -m pytest tests/test_graders.py -v          # 31 grader unit tests
-venv/bin/python -m pytest tests/test_environment.py -v      # 24 environment integration tests
-venv/bin/python -m pytest tests/test_v2_enhancements.py -v  # 44 v2 feature tests
-venv/bin/python -m pytest tests/test_api_contract.py -v     # 9 API contract tests
-venv/bin/python -m pytest tests/test_ui_contract.py -v      # 8 UI contract tests
-venv/bin/python -m pytest tests/test_inference_contract.py -v  # 3 baseline inference contract tests
+venv/bin/python -m pytest tests/test_graders.py -v
+venv/bin/python -m pytest tests/test_environment.py -v
+venv/bin/python -m pytest tests/test_v2_enhancements.py -v
+venv/bin/python -m pytest tests/test_api_contract.py -v
+venv/bin/python -m pytest tests/test_ui_contract.py -v
+venv/bin/python -m pytest tests/test_inference_contract.py -v
+venv/bin/python -m pytest tests/test_app_coverage.py -v
+venv/bin/python -m pytest tests/test_client_scripts.py -v
+
+# Current collected count
+venv/bin/python -m pytest tests/ --collect-only -q
 ```
 
-**Current status:** 152 tests passing, 0 failing (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status (latest local gate):** 345 tests collected, 331 passed, 14 skipped (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 
@@ -831,16 +836,22 @@ BSD 3-Clause (same as OpenEnv)
 
 ---
 
-## Case Bank Summary (v2)
+## Case Bank Summary (v2.3)
 
 | Task | Cases | Difficulty | Key Research Source |
 |---|---|---|---|
-| Simple Triage | 4 | Easy | NHS NEWS2 RCP 2017 |
-| Conflicting Vitals | 3 | Medium | Clinical reasoning literature |
-| Masked Deterioration | 5 | Hard | Pharmacology — beta-blocker/steroid/uraemia/adrenal masking |
-| Demographic Fairness | 12 (3×4) | Medium | Nature Medicine 2025, Lancet Digital Health 2024 |
-| Deteriorating Patient | 4 (3-step) | Hard | MIMIC-III, npj Digital Medicine 2025 |
-| **Total** | **28** | | |
+| Simple Triage | 10 | Easy | NHS NEWS2 RCP 2017 |
+| Conflicting Vitals | 8 | Medium | Clinical reasoning literature |
+| Masked Deterioration | 10 | Hard | Pharmacology masking literature |
+| Demographic Fairness | 12 | Medium | Nature Medicine / Lancet Digital Health |
+| Deteriorating Patient | 7 | Hard | MIMIC-III, npj Digital Medicine |
+| Sepsis Bundle | 4 | Hard | Surviving Sepsis Campaign |
+| Paediatric Triage (PEWS) | 6 | Hard | RCPCH PEWS guidance |
+| Medication Reconciliation | 6 | Hard | NPSA / BNF / MHRA safety alerts |
+| ICU Deterioration (SOFA) | 4 | Hard | SOFA framework and ICU guidance |
+| SBAR Handover | 4 | Medium | NHS SBAR communication standards |
+| Differential Diagnosis | 4 | Hard | Diagnostic safety-net framework |
+| **Total** | **75** | | |
 
 ---
 
@@ -850,5 +861,5 @@ For judges and evaluators:
 
 1. **Live Space** — visit https://huggingface.co/spaces/kunalkachru23/medical-triage-env and click through the web UI
 2. **API smoke test** — `curl https://kunalkachru23-medical-triage-env.hf.space/health`
-3. **Full runbook** — [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md) (setup, all endpoints, UI test plan, quickstart)
-4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (152 tests, case-wise grader validation)
+3. **Full runbook** — [`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md) (architecture, grading, evaluation evidence)
+4. **Test evidence** — [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) (current suite and validation rationale)

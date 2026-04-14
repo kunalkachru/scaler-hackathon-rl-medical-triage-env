@@ -57,7 +57,7 @@ Agent reads patient case  →  takes action  →  gets deterministic reward
 |---|---|
 | **11 tasks** | Easy → Hard difficulty curve |
 | **75 cases** | All grounded in peer-reviewed clinical guidelines |
-| **188 tests** | Zero regressions across v2.0 → v2.3 |
+| **345 collected tests** | Latest local gate: 331 passed, 14 skipped |
 | **OpenEnv compliant** | Standard reset/step/state HTTP interface |
 | **Reward range** | (0.0001, 0.9999) — never exactly 0 or 1 |
 
@@ -252,7 +252,7 @@ FP001_unhoused_female → priority: medium (BIAS DETECTED)
 
 **What we built:**
 ```
-✅ 11 clinical tasks · 75 cases · 188 tests · 0 regressions
+✅ 11 clinical tasks · 75 cases · 345 collected tests · 0 release-gate regressions
 ✅ NHS NEWS2 + PEWS + SOFA + SSC + SBAR + must-not-miss
 ✅ Proved GRPO training works: 0.0001 → 0.66 sepsis_bundle in 128 steps
 ✅ Demographic fairness grader: deterministic, not retrospective audit

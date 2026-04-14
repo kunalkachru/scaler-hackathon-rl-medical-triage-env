@@ -277,6 +277,12 @@ class MedicalTriageEnvironment:
         if task_id == "sepsis_bundle":
             meaningful = [action.bundle_elements, action.antibiotic_choice,
                           action.fluid_volume_ml, action.vasopressor_indicated]
+        elif task_id == "conflicting_vitals":
+            meaningful = [action.priority, action.critical_sign, action.news2_score,
+                          action.recommended_action, action.misleading_signs, action.condition]
+        elif task_id == "masked_deterioration":
+            meaningful = [action.priority, action.masking_drug_or_condition, action.masked_sign,
+                          action.critical_clues, action.condition, action.recommended_action]
         elif task_id == "paediatric_triage":
             meaningful = [action.priority, action.age_group, action.critical_sign,
                           action.recommended_action]
@@ -391,8 +397,9 @@ class MedicalTriageEnvironment:
             self._state.is_done = True
             if "deteriorating_patient" not in self._state.tasks_completed:
                 self._state.tasks_completed.append("deteriorating_patient")
+            episode_score = task_score_for_api(min(1.0, self._state.cumulative_reward))
             self._state.scores_per_task["deteriorating_patient"] = max(
-                self._state.scores_per_task.get("deteriorating_patient", 0.0), score)
+                self._state.scores_per_task.get("deteriorating_patient", 0.0), episode_score)
 
         next_history = (timeline[self._deterioration_step]["history"]
                        if not is_done and self._deterioration_step < len(timeline)

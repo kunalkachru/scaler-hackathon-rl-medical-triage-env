@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field
 import uvicorn
 
 from server.medical_triage_environment import MedicalTriageEnvironment
+from server.cases import CASE_BANK
 from models import (
     ResetRequest, StepRequest, StepResult, TriageState,
     TriageObservation, TASK_SCORE_OPEN_EPS, safe_cumulative_for_api,
@@ -45,8 +46,10 @@ app = FastAPI(
     title="Medical Triage Environment",
     description=(
         "An OpenEnv RL environment for clinical triage. "
-        "An AI agent reads patient cases and performs triage using NEWS2 and clinical reasoning. "
-        "Eight tasks: simple triage, conflicting vitals, masked deterioration, demographic fairness, deteriorating patient, sepsis bundle compliance, paediatric triage (PEWS), and medication reconciliation."
+        "An AI agent reads patient cases and performs triage using NEWS2, PEWS, SOFA, and structured clinical reasoning. "
+        "Eleven tasks: simple triage, conflicting vitals, masked deterioration, demographic fairness, deteriorating patient, "
+        "sepsis bundle compliance, paediatric triage (PEWS), medication reconciliation, ICU deterioration (SOFA), "
+        "SBAR handover, and differential diagnosis."
     ),
     version="2.3.0",
     docs_url="/docs",
@@ -154,6 +157,8 @@ class EpisodeHistory:
         }
 
 history = EpisodeHistory()
+TOTAL_TASKS_AVAILABLE = len(CASE_BANK)
+TOTAL_CASES_AVAILABLE = sum(len(cases) for cases in CASE_BANK.values())
 
 
 # ─────────────────────────────────────────────────────────────
@@ -177,7 +182,8 @@ async def reset(request: ResetRequest = Body(default=ResetRequest())):
     - task_id: which difficulty task to use
     - case_index: specific case (for reproducibility)
     - seed: random seed
-    - session_id: pass your own ID to reuse a session slot; omit to get a fresh one
+    - session_id: pass your own ID to isolate or reuse that specific session slot
+      (if omitted, the legacy shared '_default' session is reset)
 
     The response info dict always contains the session_id to use in subsequent step() calls.
     """
@@ -204,10 +210,12 @@ async def step(request: StepRequest):
         # Record every completed episode for training progress visualization
         if result.done:
             obs = result.observation
+            info_dump = result.info.model_dump(exclude_none=False)
+            episode_reward = info_dump.get("cumulative_reward", result.reward)
             history.record(
                 task_id=obs.task_id or "",
                 case_id=obs.case_id or "",
-                reward=result.reward,
+                reward=episode_reward,
                 breakdown=obs.score_breakdown or {},
             )
         return result
@@ -260,21 +268,26 @@ async def get_metrics():
         return {
             "total_episodes": 0,
             "active_sessions": active_sessions,
+            "total_tasks_available": TOTAL_TASKS_AVAILABLE,
+            "total_cases_available": TOTAL_CASES_AVAILABLE,
             "by_task": {},
             "difficulty_gradient_verified": False,
             "cases_covered": {},
         }
 
-    # Canonical order easy → hard across all 8 tasks
+    # Canonical order easy → hard across all 11 tasks
     DIFFICULTY_ORDER = [
         "simple_triage",
         "demographic_fairness",
         "conflicting_vitals",
+        "sbar_handover",
         "masked_deterioration",
         "deteriorating_patient",
         "sepsis_bundle",
         "paediatric_triage",
         "medication_reconciliation",
+        "icu_deterioration",
+        "differential_diagnosis",
     ]
 
     by_task: dict[str, list[float]] = {}
@@ -323,8 +336,8 @@ async def get_metrics():
     return {
         "total_episodes":               len(eps),
         "active_sessions":              active_sessions,
-        "total_tasks_available":        8,
-        "total_cases_available":        63,
+        "total_tasks_available":        TOTAL_TASKS_AVAILABLE,
+        "total_cases_available":        TOTAL_CASES_AVAILABLE,
         "by_task":                      {t: task_metrics[t] for t in ordered_keys + extra_keys},
         "difficulty_gradient_verified": gradient_verified,
         "cases_covered":                {t: sorted(ids) for t, ids in cases_covered.items()},
@@ -422,7 +435,6 @@ async def grade_fairness(request: FairnessGradeRequest):
 @app.get("/tasks")
 async def list_tasks():
     """List all available tasks with descriptions."""
-    from server.cases import CASE_BANK
     return {
         task_id: {
             "case_count": len(cases),

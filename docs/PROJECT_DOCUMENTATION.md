@@ -1,11 +1,13 @@
 # Medical Triage RL Environment — Project Documentation
 
-**Version:** v2.0.0  
+**Version:** v2.3.0  
 **Team:** Team Falcons — Scaler × Meta PyTorch OpenEnv Hackathon 2026  
 **Live Space:** https://huggingface.co/spaces/kunalkachru23/medical-triage-env  
 **API URL:** https://kunalkachru23-medical-triage-env.hf.space  
 **GitHub:** https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env  
-**Tests:** 116 passing, 0 failing
+**Tests (latest local gate):** 345 collected, 331 passed, 14 skipped
+
+> NOTE: This document started as an early-phase runbook. For current implementation truth, prefer `README.md`, `openenv.yaml`, and `docs/TECHNICAL_REPORT.md`.
 
 ---
 
@@ -33,11 +35,17 @@ In a real emergency department, a triage nurse must decide urgency quickly from 
 
 | Task | Difficulty | Cases | Episode Type | Research Basis |
 |---|---|---|---|---|
-| `simple_triage` | Easy | 4 | Single-step | NHS NEWS2 RCP 2017 |
-| `conflicting_vitals` | Medium | 3 | Single-step | Clinical reasoning literature |
-| `masked_deterioration` | Hard | 5 | Single-step | Pharmacology — beta-blocker/steroid/uraemia/adrenal |
-| `demographic_fairness` | Medium | 12 (3×4) | Single-step | Nature Medicine 2025, Lancet Digital Health 2024 |
-| `deteriorating_patient` | Hard | 4 (3-turn) | Multi-turn | MIMIC-III, npj Digital Medicine 2025 |
+| `simple_triage` | Easy | 10 | Single-step | NHS NEWS2 RCP 2017 |
+| `conflicting_vitals` | Medium | 8 | Single-step | Clinical reasoning literature |
+| `masked_deterioration` | Hard | 10 | Single-step | Pharmacology masking literature |
+| `demographic_fairness` | Medium | 12 | Single-step | Nature Medicine 2025, Lancet Digital Health |
+| `deteriorating_patient` | Hard | 7 | Multi-turn | MIMIC-III, npj Digital Medicine 2025 |
+| `sepsis_bundle` | Hard | 4 | Single-step | Surviving Sepsis Campaign 2021 |
+| `paediatric_triage` | Hard | 6 | Single-step | PEWS / RCPCH guidance |
+| `medication_reconciliation` | Hard | 6 | Single-step | NPSA/BNF/MHRA medication safety |
+| `icu_deterioration` | Hard | 4 | Single-step | SOFA framework / ICU deterioration |
+| `sbar_handover` | Medium | 4 | Single-step | NHS SBAR framework |
+| `differential_diagnosis` | Hard | 4 | Single-step | Diagnostic safety-net framework |
 | **Total** | | **28** | | |
 
 ### 2.2 Core Interface
@@ -386,32 +394,36 @@ Demonstrates the environment supports training, not just evaluation:
 
 ## 9. Testing and Validation
 
-### 9.1 Test Suite (119 tests)
+### 9.1 Test Suite (current local gate)
 
 ```bash
 # Full suite
 pytest tests/ -q
-# → 119 passed in ~0.3s
+# Latest local gate: 345 collected, 331 passed, 14 skipped
 
 # By module
-pytest tests/test_graders.py -v           # 31 tests — NEWS2, priority distance, all task graders
-pytest tests/test_environment.py -v       # 24 tests — reset/step/state/episode flows
-pytest tests/test_v2_enhancements.py -v   # 44 tests — fairness, deterioration, confidence, asymmetric + regression checks
-pytest tests/test_api_contract.py -v      # 9 tests  — session isolation, fairness endpoint, metrics
-pytest tests/test_ui_contract.py -v       # 8 tests  — web UI hooks and UI regression guards
-pytest tests/test_inference_contract.py -v # 3 tests  — baseline inference reproducibility guards
+pytest tests/test_graders.py -v
+pytest tests/test_environment.py -v
+pytest tests/test_v2_enhancements.py -v
+pytest tests/test_api_contract.py -v
+pytest tests/test_ui_contract.py -v
+pytest tests/test_inference_contract.py -v
+pytest tests/test_app_coverage.py -v
+pytest tests/test_client_scripts.py -v
 ```
 
 **Test coverage:**
 
-| Suite | Tests | What it covers |
+| Suite | Scope | What it covers |
 |---|---|---|
-| `test_graders.py` | 31 | NEWS2 boundaries, priority distance, all 3 core graders against every case |
-| `test_environment.py` | 24 | reset/step/state contracts, full episode flows, multi-episode independence |
-| `test_v2_enhancements.py` | 44 | Asymmetric penalty, fairness grader, deterioration multi-turn, confidence calibration, all-5-tasks integration + regression tests for dead reward keys and news2_score correctness |
-| `test_api_contract.py` | 9 | Session isolation, grade-fairness endpoint, metrics structure, step preserves fields |
-| `test_ui_contract.py` | 8 | Web UI HTML contract, session wiring, empty-state/task-switch guards, and history demarcation checks |
-| `test_inference_contract.py` | 3 | Baseline script contract checks to prevent reproducibility regressions |
+| `test_graders.py` | unit | NEWS2 boundaries, priority distance, task graders |
+| `test_environment.py` | integration | reset/step/state contracts, episode flows, independence |
+| `test_v2_enhancements.py` | regression | fairness, deterioration, confidence, synonyms |
+| `test_api_contract.py` | API contract | session handling, fairness endpoint, metrics structure |
+| `test_ui_contract.py` | UI contract | web UI hooks, task-switch/history guards |
+| `test_inference_contract.py` | script contract | inference reproducibility guards |
+| `test_app_coverage.py` | endpoint coverage | broad app endpoint and branch coverage |
+| `test_client_scripts.py` | script/client | static and live-marked script contract checks |
 
 ### 9.2 Pre-Submission Validation Gate
 
@@ -420,7 +432,7 @@ pytest tests/test_inference_contract.py -v # 3 tests  — baseline inference rep
 ```
 
 Pipeline (5 steps):
-1. Full test suite (119 tests must pass)
+1. Full test suite must pass (`pytest tests/ -q`)
 2. Docker build
 3. Container health check on port 7860
 4. Reset endpoint smoke check

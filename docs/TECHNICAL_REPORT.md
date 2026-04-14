@@ -358,17 +358,17 @@ reward function incentivises vitals-only decision-making, penalising demographic
 
 ### 7.1 Deployment
 
-- **Docker**: `Dockerfile` in `medical_triage_env/` is the canonical build
+- **Docker**: `Dockerfile` in `scaler-hackathon-rl-medical-triage-env/` is the canonical build
 - **Port**: 7860 (HF Spaces runtime), 8000 (local dev)
 - **HF Spaces**: Production at `kunalkachru23/medical-triage-env`, staging at
-  `kunalkachru23/medical-triage-env-staging`
+  `kunalkachru23/medical-triage-env-staging-latest`
 - **RL Dataset**: 75 (observation, action, reward) triples at
   `kunalkachru23/medical-triage-triples` on HF Datasets
 - **GRPO Adapter**: `kunalkachru23/grpo-medical-triage-qwen1.5b` on HF Hub
 
 ### 7.2 Test Suite
 
-188 tests across 5 test files (zero regressions across v2.0.0 → v2.3.0):
+Latest local gate: 345 tests collected, 331 passed, 14 skipped.
 
 | File | Scope |
 |---|---|
@@ -377,8 +377,10 @@ reward function incentivises vitals-only decision-making, penalising demographic
 | `tests/test_api_contract.py` | HTTP contract tests for all endpoints |
 | `tests/test_inference_contract.py` | Inference pipeline contract |
 | `tests/test_v2_enhancements.py` | Fairness, confidence, synonyms, multi-turn |
+| `tests/test_app_coverage.py` | Endpoint/path coverage for `server/app.py` |
+| `tests/test_client_scripts.py` | Script/client contract and smoke checks |
 
-Full browser + API test: `scripts/full_browser_test.py` — 112 checks across all 11
+Full browser + API test: `scripts/full_browser_test.py` — 115 checks across all 11
 tasks, synonym acceptance, reward boundary validation, new endpoints.
 
 ### 7.3 Performance

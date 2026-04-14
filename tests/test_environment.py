@@ -248,6 +248,30 @@ class TestEpisodeFlows:
         assert result.reward >= 0.75, \
             f"Expert masked deterioration response should score ≥0.75, got {result.reward}"
 
+    def test_masked_deterioration_task_specific_fields_not_treated_empty(self):
+        """Task-specific masked fields should bypass the generic empty-response guard."""
+        env = MedicalTriageEnvironment()
+        env.reset(ResetRequest(task_id="masked_deterioration", case_index=0))
+        action = TriageAction(
+            masking_drug_or_condition="bisoprolol",
+            masked_sign="heart_rate",
+            critical_clues=["lactate", "urine_output_reduced"],
+            condition="septic_shock",
+            recommended_action="emergency_response",
+        )
+        result = env.step(action)
+        assert result.reward > TASK_SCORE_OPEN_EPS
+
+    def test_deteriorating_patient_scores_per_task_tracks_episode_total(self):
+        """scores_per_task should record episode-level return for multi-turn episodes."""
+        env = MedicalTriageEnvironment()
+        env.reset(ResetRequest(task_id="deteriorating_patient", case_index=0))
+        env.step(TriageAction(action="monitor"))
+        final = env.step(TriageAction(action="escalate"))
+        assert final.done is True
+        expected = min(1.0 - TASK_SCORE_OPEN_EPS, env.state.cumulative_reward)
+        assert env.state.scores_per_task.get("deteriorating_patient", 0.0) >= expected
+
     def test_multiple_episodes_independent(self):
         """Multiple episodes should not share state between resets."""
         env = MedicalTriageEnvironment()
