@@ -9,6 +9,27 @@
 **Config:** 11 tasks × 8 prompts = 88 prompts | 2 epochs | 170 steps | G=4
 **Date:** 2026-04-13 | Reward oracle: production HF Space
 
+### Run / Resume Instructions (current)
+
+Use these commands when training is interrupted (common on Colab):
+
+```bash
+# Fresh run
+python grpo_train.py --output-dir grpo-medical-triage
+
+# Resume from latest checkpoint-* in output dir
+python grpo_train.py --output-dir grpo-medical-triage --resume-latest
+
+# Resume from a specific checkpoint
+python grpo_train.py --output-dir grpo-medical-triage \
+  --resume-from-checkpoint grpo-medical-triage/checkpoint-50
+```
+
+Notebook equivalent (`notebooks/grpo_colab.ipynb`, Cell 10):
+- `RUN_MODE='fresh'`: first run
+- `RUN_MODE='resume_latest'`: continue after disconnect/abort
+- `RUN_MODE='resume_path'`: continue from `RESUME_CHECKPOINT_PATH`
+
 ### Per-task Mean Reward (from training log)
 
 | Task | Mean Reward | Peak | Notes |
