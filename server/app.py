@@ -549,7 +549,25 @@ For masked_deterioration respond with:
   {"priority":"...","masking_drug_or_condition":"...","masked_sign":"...","critical_clues":["..."],"condition":"...","recommended_action":"...","rationale":"...","confidence":<0.0-1.0>}
 
 For deteriorating_patient respond with:
-  {"action":"monitor|escalate|emergency_response","rationale":"...","confidence":<0.0-1.0>}"""
+  {"action":"monitor|escalate|emergency_response","rationale":"...","confidence":<0.0-1.0>}
+
+For sepsis_bundle respond with:
+  {"priority":"critical|high","bundle_elements":["blood_cultures","broad_spectrum_antibiotics","iv_fluid_bolus","lactate_measurement"],"antibiotic_choice":"<drug>","fluid_volume_ml":<int>,"vasopressor_indicated":true|false,"rationale":"...","confidence":<0.0-1.0>}
+
+For paediatric_triage respond with:
+  {"priority":"low|medium|high|critical","age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<int 0-13>,"critical_sign":"<vital_name>","recommended_action":"routine_monitoring|urgent_review|emergency_response","rationale":"...","confidence":<0.0-1.0>}
+
+For medication_reconciliation respond with:
+  {"issues_found":["<issue>"],"severity":"critical|high|moderate|low","requires_pharmacist":true|false,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","drug_to_withhold":"<drug or none>","rationale":"...","confidence":<0.0-1.0>}
+
+For icu_deterioration respond with:
+  {"sofa_score":<int 0-24>,"primary_organ_failure":"cardiovascular|respiratory|renal|hepatic|neurological|coagulation","deterioration_trend":"improving|stable|worsening","intervention":"maintain_current|increase_support|emergency_escalation|prepare_palliation","rationale":"..."}
+
+For sbar_handover respond with:
+  {"escalation_required":true|false,"priority":"low|medium|high|critical","assessment":"<clinical summary>","recommendation":"routine_monitoring|urgent_review|emergency_response","rationale":"..."}
+
+For differential_diagnosis respond with:
+  {"must_not_miss":"<life-threatening diagnosis to exclude>","top_diagnosis":"<most likely diagnosis>","differentials":["<dx1>","<dx2>","<dx3>"],"first_investigation":"<most important first test>","urgency":"immediate|urgent|routine","rationale":"<safety-net reasoning>"}"""
 
     def parse_json_safe(text):
         text = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
@@ -719,6 +737,109 @@ def _rule_based_suggest(patient_history: str, task_id: str) -> dict:
         normal_signs = [k for k, v in scores.items() if v == 0]
         base["misleading_signs"] = normal_signs[:2] if normal_signs else ["check normal-looking parameters"]
         base["condition"] = "unknown — check full clinical picture"
+
+    if task_id == "paediatric_triage":
+        # Estimate age group from text heuristics
+        age_group = "school_age"
+        if any(w in text for w in ["infant", "newborn", "neonate", "month"]):
+            age_group = "infant"
+        elif any(w in text for w in ["toddler", "2 year", "3 year", "2-year", "3-year"]):
+            age_group = "toddler"
+        elif any(w in text for w in ["preschool", "4 year", "5 year", "4-year", "5-year"]):
+            age_group = "preschool"
+        elif any(w in text for w in ["teen", "adolescent", "14", "15", "16", "17"]):
+            age_group = "adolescent"
+        # PEWS is roughly correlated with NEWS2 total for rule-based
+        pews = min(13, max(0, int(total * 0.65)))
+        return {
+            "priority": priority,
+            "age_group": age_group,
+            "pews_score": pews,
+            "critical_sign": critical_sign,
+            "recommended_action": action,
+            "rationale": rationale,
+            "confidence": round(0.5 + min(0.35, total * 0.04), 2),
+        }
+
+    if task_id == "medication_reconciliation":
+        return {
+            "issues_found": ["potential_drug_interaction"],
+            "severity": "high" if total >= 5 else "medium",
+            "requires_pharmacist": True,
+            "recommended_action": "withhold_drug" if total >= 5 else "modify_dose",
+            "drug_to_withhold": "",
+            "rationale": "Rule-based: clinical deterioration detected — review all medications for interactions and contraindications.",
+            "confidence": 0.5,
+        }
+
+    if task_id == "icu_deterioration":
+        sofa = min(24, max(0, int(total * 1.5)))
+        trend = "worsening" if total >= 5 else ("stable" if total >= 3 else "improving")
+        intervention = "emergency_escalation" if total >= 7 else ("increase_support" if total >= 5 else "maintain_current")
+        organ = critical_sign if critical_sign in ("respiratory_rate", "spo2") else "cardiovascular"
+        organ_map = {"respiratory_rate": "respiratory", "spo2": "respiratory",
+                     "systolic_bp": "cardiovascular", "heart_rate": "cardiovascular",
+                     "temperature": "neurological", "consciousness": "neurological"}
+        return {
+            "sofa_score": sofa,
+            "primary_organ_failure": organ_map.get(critical_sign, "cardiovascular"),
+            "deterioration_trend": trend,
+            "intervention": intervention,
+            "rationale": f"Rule-based: NEWS2={total}, critical parameter={critical_sign}. SOFA estimated at {sofa}.",
+        }
+
+    if task_id == "sbar_handover":
+        escalation = total >= 5
+        return {
+            "escalation_required": escalation,
+            "priority": priority,
+            "assessment": f"Patient presenting with NEWS2={total}. Most critical parameter: {critical_sign}. Vitals: RR={rr}, SpO2={spo2}%, BP={sbp}, HR={hr}, Temp={temp}.",
+            "recommendation": action,
+            "rationale": f"Rule-based SBAR: NEWS2={total}. {'Escalation required.' if escalation else 'Monitor closely.'}",
+        }
+
+    if task_id == "differential_diagnosis":
+        # Heuristic: chest pain → cardiac; headache → neuro; abdo → surgical
+        chest = any(w in text for w in ["chest pain", "chest tightness", "crushing", "central chest", "cardiac"])
+        headache = any(w in text for w in ["headache", "thunderclap", "worst headache", "head pain"])
+        abdo = any(w in text for w in ["abdominal", "abdo pain", "belly", "epigastric"])
+        sob = any(w in text for w in ["shortness of breath", "dyspnoea", "sob", "breathless"])
+
+        if chest:
+            must_not_miss = "stemi"
+            top_dx = "acute_coronary_syndrome"
+            differentials = ["aortic_dissection", "pulmonary_embolism", "unstable_angina"]
+            investigation = "ecg"
+        elif headache:
+            must_not_miss = "subarachnoid_haemorrhage"
+            top_dx = "subarachnoid_haemorrhage"
+            differentials = ["meningitis", "migraine", "hypertensive_emergency"]
+            investigation = "ct_head"
+        elif sob:
+            must_not_miss = "pulmonary_embolism"
+            top_dx = "pulmonary_embolism"
+            differentials = ["pneumothorax", "acute_coronary_syndrome", "acute_heart_failure"]
+            investigation = "ctpa"
+        elif abdo:
+            must_not_miss = "aortic_aneurysm_rupture"
+            top_dx = "acute_abdomen"
+            differentials = ["appendicitis", "perforated_viscus", "mesenteric_ischaemia"]
+            investigation = "ct_abdomen"
+        else:
+            must_not_miss = "sepsis"
+            top_dx = "infection"
+            differentials = ["sepsis", "pulmonary_embolism", "acute_coronary_syndrome"]
+            investigation = "ecg"
+
+        urgency = "immediate" if total >= 5 else ("urgent" if total >= 3 else "routine")
+        return {
+            "must_not_miss": must_not_miss,
+            "top_diagnosis": top_dx,
+            "differentials": differentials,
+            "first_investigation": investigation,
+            "urgency": urgency,
+            "rationale": f"Rule-based safety-net: presenting features suggest {top_dx}. Must exclude {must_not_miss} first.",
+        }
 
     return base
 
@@ -1527,13 +1648,25 @@ function renderResult(obs, reward, done, info) {
     }).join("");
 
   const gt = info.ground_truth;
-  const gtHtml = (done && gt) ? `
-    <div style="margin-top:12px;padding:10px;background:#0f1a0f;border:1px solid #1d3a1d;border-radius:8px;font-size:11px;color:var(--muted)">
-      <div style="font-weight:600;color:#5cb85c;margin-bottom:4px">Ground Truth Revealed:</div>
-      ${gt.critical_sign?"<div>Critical sign: <strong style='color:#e8eaf0'>"+gt.critical_sign+"</strong></div>":""}
-      ${gt.priority?"<div>Priority: <strong style='color:#e8eaf0'>"+gt.priority+"</strong></div>":""}
-      ${gt.rationale?"<div style='margin-top:4px'>"+gt.rationale.substring(0,200)+"</div>":""}
-    </div>` : "";
+  const gtHtml = (done && gt) ? (() => {
+    const rows = [];
+    if (gt.priority)               rows.push(`Priority: <strong style='color:#e8eaf0'>${gt.priority}</strong>`);
+    if (gt.critical_sign)          rows.push(`Critical sign: <strong style='color:#e8eaf0'>${gt.critical_sign}</strong>`);
+    if (gt.intervention)           rows.push(`Intervention: <strong style='color:#e8eaf0'>${gt.intervention}</strong>`);
+    if (gt.sofa_score != null)     rows.push(`SOFA score: <strong style='color:#e8eaf0'>${gt.sofa_score}</strong>`);
+    if (gt.primary_organ_failure)  rows.push(`Organ failure: <strong style='color:#e8eaf0'>${gt.primary_organ_failure}</strong>`);
+    if (gt.escalation_required != null) rows.push(`Escalation required: <strong style='color:#e8eaf0'>${gt.escalation_required}</strong>`);
+    if (gt.recommendation)         rows.push(`Recommendation: <strong style='color:#e8eaf0'>${gt.recommendation}</strong>`);
+    if (gt.must_not_miss)          rows.push(`Must-not-miss: <strong style='color:#e8eaf0'>${gt.must_not_miss}</strong>`);
+    if (gt.top_diagnosis)          rows.push(`Top diagnosis: <strong style='color:#e8eaf0'>${gt.top_diagnosis}</strong>`);
+    if (gt.first_investigation)    rows.push(`First investigation: <strong style='color:#e8eaf0'>${gt.first_investigation}</strong>`);
+    if (gt.recommended_action)     rows.push(`Recommended action: <strong style='color:#e8eaf0'>${gt.recommended_action}</strong>`);
+    if (gt.rationale)              rows.push(`<span style='color:#aaa'>${gt.rationale.substring(0,200)}</span>`);
+    return `<div style="margin-top:12px;padding:10px;background:#0f1a0f;border:1px solid #1d3a1d;border-radius:8px;font-size:11px;color:var(--muted)">
+      <div style="font-weight:600;color:#5cb85c;margin-bottom:6px">Ground Truth Revealed:</div>
+      ${rows.map(r=>`<div style="margin-bottom:2px">${r}</div>`).join("")}
+    </div>`;
+  })() : "";
 
   const hintHtml = obs.hint ? `<div class="hint-box">💡 ${obs.hint}</div>` : "";
 
