@@ -170,3 +170,67 @@ Implementation: [`server/cases.py`](../server/cases.py), graders in [`server/gra
 - Side-by-side demo MP4: [`scripts/record_learning_curve_demo.py`](../scripts/record_learning_curve_demo.py) (needs `ffmpeg`)
 
 Replace `DEFAULT_BASE_URL` or pass flags to hit **staging** `.hf.space` URL.
+
+---
+
+## 11. Reliability + presentation polish plan (active)
+
+**Goal:** remove noisy/flaky signals and tighten evaluator narrative for judge-facing confidence.
+
+### Improvement Area 1 — Reliability signal
+
+- [x] **R1. Harden `scripts/pre_submit_check.sh` startup health probe**
+  - Add short initial settle (`sleep 2`), connection timeout, silent retries.
+  - Keep failure strict when retries exhaust.
+  - **Success criteria:** no `curl (56)` noise in normal runs.
+  - **Status:** Implemented in script; requires full gate run confirmation.
+
+- [x] **R2. Add explicit readiness wait helper in release path**
+  - In `scripts/full_release_gate.sh`, after deploy, poll `/health` and `/reset` with bounded backoff before live checks.
+  - **Success criteria:** no race where first live verify sees stale/not-ready revision.
+  - **Status:** Implemented in script; requires staging deploy verification.
+
+- [x] **R3. Add controlled retry wrapper for UI-heavy test only**
+  - Wrap `scripts/full_browser_test.py` with one retry on known transient navigation timeout.
+  - Log retry reason clearly; fail hard on repeated timeout.
+  - **Success criteria:** stable CI signal while preserving strictness.
+  - **Status:** Implemented as `scripts/run_full_browser_with_retry.sh` (single retry on known timeout signatures).
+
+- [x] **R4. Emit machine-readable run artifact**
+  - Output JSON summary for local + staging gates: command, status, duration, timestamp.
+  - **Success criteria:** single evidence bundle for judges.
+  - **Status:** Implemented in `scripts/pre_submit_check.sh` and `scripts/full_release_gate.sh` (writes under `artifacts/gates/`).
+
+- [x] **R5. Add one-command confidence run**
+  - Add `scripts/final_submission_check.sh` chaining canonical checks in strict order.
+  - **Success criteria:** one command gives go/no-go.
+  - **Status:** Implemented; runs coverage, pre-submit gate, retry-safe full browser suite, then release gate.
+
+### Improvement Area 2 — Presentation clarity
+
+- [x] **P1. Create `docs/EVALUATOR_BRIEF.md`**
+  - One-page judge narrative: relevance, why environment is hard/real, task map, run steps, expected outputs.
+  - **Status:** Implemented (judge-facing one-page brief added).
+
+- [x] **P2. Create `docs/EVIDENCE_SUMMARY.md`**
+  - Single source of truth: latest test totals, local gate, staging/prod verify, endpoint checks, artifact links.
+  - **Guardrail:** prevent cross-doc metric drift.
+  - **Status:** Implemented; includes restamp instructions after next full confidence run.
+
+- [ ] **P3. Add submission checklist section in `README.md`**
+  - Explicit pass table with date and command references (e.g., `openenv validate`, `full_browser_test`).
+
+- [ ] **P4. Standardize counts/claims across docs**
+  - Make docs point to canonical metrics in `docs/EVIDENCE_SUMMARY.md`.
+  - Label old numbers as historical where needed.
+
+- [ ] **P5. Add known limits + mitigations**
+  - Document controlled transient risks and how scripts mitigate them.
+
+### Implementation sequence (recommended)
+
+1. R1 + R2 (largest reliability gains)
+2. R3 + R4
+3. P1 + P2 (core evaluator packet)
+4. P3 + P4 + P5
+5. Re-run full gate and stamp evidence docs with fresh results

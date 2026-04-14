@@ -132,6 +132,7 @@ inference.py / train.py / GRPO notebook
 | **Compute** | Colab T4 free tier · 1h 17m · 128 steps |
 | **Reward oracle** | Live HF Space `/step` endpoint |
 | **Adapter** | `kunalkachru23/grpo-medical-triage-qwen1.5b` |
+| **Operational robustness** | Checkpoint resume (`--resume-latest`) after Colab interruption |
 
 **Before → After (Run 2, 128 steps):**
 

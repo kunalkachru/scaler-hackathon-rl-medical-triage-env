@@ -84,6 +84,8 @@ Safari does **not** play WebM inline; use the **MP4** link above. On the GitHub 
 For complete evaluator-facing documentation (architecture, setup, deployment, UI testing, and validation), see:
 - [`docs/PROJECT_DOCUMENTATION.md`](docs/PROJECT_DOCUMENTATION.md)
 - [`docs/EDUCATIONAL_DEEP_DIVE.md`](docs/EDUCATIONAL_DEEP_DIVE.md) — long-form narrative / learning walkthrough
+- [`docs/EVALUATOR_BRIEF.md`](docs/EVALUATOR_BRIEF.md) — 1-page judge quick brief
+- [`docs/EVIDENCE_SUMMARY.md`](docs/EVIDENCE_SUMMARY.md) — canonical metrics + validation status
 
 ---
 
@@ -471,6 +473,13 @@ python -m playwright install chromium
 python scripts/browser_ui_smoke.py --base-url "https://<your-space>.hf.space"
 ```
 
+Run exhaustive browser + API test with one controlled retry on known transient navigation timeout:
+
+```bash
+chmod +x ./scripts/run_full_browser_with_retry.sh
+./scripts/run_full_browser_with_retry.sh --base-url "https://<your-space>.hf.space"
+```
+
 Run one-command full release gate (local + baseline reproducibility + live API + browser UI):
 
 ```bash
@@ -492,6 +501,20 @@ chmod +x ./scripts/full_release_gate.sh
 # If already deployed and you only want verification:
 ./scripts/full_release_gate.sh --skip-deploy --base-url "https://<your-space>.hf.space" --expect-llm true
 ```
+
+Single-command final confidence run (canonical go/no-go sequence):
+
+```bash
+chmod +x ./scripts/final_submission_check.sh
+./scripts/final_submission_check.sh \
+  --base-url "https://<your-space>.hf.space" \
+  --repo-id "<your-username>/<your-space-name>" \
+  --expect-llm true
+```
+
+Machine-readable gate artifacts are emitted to:
+- `artifacts/gates/pre_submit_check_summary.json`
+- `artifacts/gates/full_release_gate_summary.json`
 
 > If you get a "Playwright not found" error with `--skip-playwright-install`, run:
 > `python -m pip install playwright && python -m playwright install chromium`
@@ -634,6 +657,27 @@ Design: uses the **same patient case** across all repetitions of a given task so
 ```
 
 The dense per-dimension reward signal (not binary pass/fail) enables the agent to receive a meaningful learning gradient even on imperfect responses.
+
+### GRPO fine-tuning + checkpoint resume (Colab-safe)
+
+Use `grpo_train.py` for LoRA + GRPO training against the live environment reward oracle.
+
+```bash
+# Fresh run (step 0)
+python grpo_train.py --output-dir grpo-medical-triage
+
+# Resume after interruption (auto-pick latest checkpoint-*)
+python grpo_train.py --output-dir grpo-medical-triage --resume-latest
+
+# Resume from explicit checkpoint path
+python grpo_train.py --output-dir grpo-medical-triage \
+  --resume-from-checkpoint grpo-medical-triage/checkpoint-50
+```
+
+Notebook equivalent (`notebooks/grpo_colab.ipynb`, Cell 10):
+- `RUN_MODE='fresh'` for first run
+- `RUN_MODE='resume_latest'` after disconnect/abort
+- `RUN_MODE='resume_path'` with `RESUME_CHECKPOINT_PATH` for manual recovery
 
 ## Multi-Model Benchmark
 

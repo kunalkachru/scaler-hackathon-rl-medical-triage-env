@@ -32,6 +32,11 @@ CURRENT_STAGE="initialization"
 LAST_CMD=""
 DEPLOY_MAX_ATTEMPTS=3
 DEPLOY_INITIAL_DELAY_SEC=10
+SCRIPT_START_EPOCH="$(date +%s)"
+SUMMARY_DIR="./artifacts/gates"
+SUMMARY_FILE="${SUMMARY_DIR}/full_release_gate_summary.json"
+ORIGINAL_ARGS=("$@")
+SCRIPT_COMMAND="./scripts/full_release_gate.sh ${ORIGINAL_ARGS[*]}"
 
 usage() {
   cat <<'EOF'
@@ -178,8 +183,45 @@ fail_with_guidance() {
   esac
 }
 
+write_summary() {
+  local status="$1"
+  local error_stage="${2:-}"
+  local script_end_epoch
+  script_end_epoch="$(date +%s)"
+  local duration_sec=$(( script_end_epoch - SCRIPT_START_EPOCH ))
+  mkdir -p "$SUMMARY_DIR"
+  python - "$SUMMARY_FILE" "$status" "$duration_sec" "$error_stage" "$BASE_URL" "$REPO_ID" "$SCRIPT_COMMAND" <<'PY'
+import datetime
+import json
+import pathlib
+import sys
+
+out_path = pathlib.Path(sys.argv[1])
+status = sys.argv[2]
+duration_sec = int(sys.argv[3])
+error_stage = sys.argv[4]
+base_url = sys.argv[5]
+repo_id = sys.argv[6]
+command = sys.argv[7]
+
+payload = {
+    "command": command.strip(),
+    "status": status,
+    "duration_sec": duration_sec,
+    "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "base_url": base_url,
+    "repo_id": repo_id,
+}
+if error_stage:
+    payload["error_stage"] = error_stage
+
+out_path.write_text(json.dumps(payload, indent=2) + "\n")
+PY
+}
+
 on_err() {
   local code="$?"
+  write_summary "failed" "$CURRENT_STAGE"
   fail_with_guidance "$CURRENT_STAGE" "$LINENO" "$LAST_CMD" "$code"
   exit "$code"
 }
@@ -237,6 +279,46 @@ step() {
   echo "============================================================"
   echo "[release-gate] $title"
   echo "============================================================"
+}
+
+wait_for_live_readiness() {
+  local base_url="$1"
+  local max_attempts="${2:-8}"
+  local initial_delay_sec="${3:-2}"
+  local connect_timeout_sec="${4:-4}"
+
+  local attempt=1
+  local delay="$initial_delay_sec"
+  while (( attempt <= max_attempts )); do
+    echo "[release-gate] readiness probe ${attempt}/${max_attempts} @ ${base_url}"
+    local health_ok="false"
+    local reset_ok="false"
+
+    if curl -fsS --connect-timeout "$connect_timeout_sec" "${base_url}/health" >/dev/null 2>&1; then
+      health_ok="true"
+    fi
+
+    if curl -fsS --connect-timeout "$connect_timeout_sec" \
+      -X POST "${base_url}/reset" \
+      -H "content-type: application/json" \
+      -d '{"task_id":"simple_triage","case_index":0,"seed":42}' >/dev/null 2>&1; then
+      reset_ok="true"
+    fi
+
+    if [[ "$health_ok" == "true" && "$reset_ok" == "true" ]]; then
+      echo "[release-gate] readiness confirmed: /health + /reset are responsive."
+      return 0
+    fi
+
+    if (( attempt == max_attempts )); then
+      break
+    fi
+    echo "[release-gate] not ready yet (health=${health_ok}, reset=${reset_ok}); retrying in ${delay}s..."
+    sleep "$delay"
+    delay=$(( delay * 2 ))
+    attempt=$(( attempt + 1 ))
+  done
+  return 1
 }
 
 # Auto-source .env if present (so HF_TOKEN etc. are visible to sub-commands)
@@ -328,6 +410,12 @@ fi
 step "Sync Space credentials"
 run_cmd python setupCredentials.py
 
+step "Post-deploy readiness wait (/health + /reset)"
+if ! wait_for_live_readiness "$BASE_URL" 8 2 4; then
+  echo "[release-gate] Space did not become ready in time at $BASE_URL"
+  exit 1
+fi
+
 step "Organizer pre-validation parity"
 run_cmd ./scripts/validate-submission.sh "$BASE_URL" "."
 
@@ -357,3 +445,4 @@ run_cmd python scripts/browser_ui_smoke.py --base-url "$BASE_URL"
 
 step "Release gate PASSED"
 echo "[release-gate] All checks succeeded."
+write_summary "passed"

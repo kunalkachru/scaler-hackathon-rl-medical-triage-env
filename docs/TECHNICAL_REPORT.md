@@ -259,6 +259,18 @@ no labelled examples — the environment IS the teacher.
 7. Checkpoint saved to Google Drive every 10 steps
 ```
 
+Resume behavior (implemented in `grpo_train.py` and the Colab notebook):
+- Fresh run: start from step 0
+- Auto-resume latest: continue from highest `checkpoint-*` in output directory
+- Explicit resume: continue from a user-provided checkpoint path
+
+Example CLI:
+```bash
+python grpo_train.py --output-dir grpo-medical-triage --resume-latest
+python grpo_train.py --output-dir grpo-medical-triage \
+  --resume-from-checkpoint grpo-medical-triage/checkpoint-50
+```
+
 ### 5.3 Key Design Decisions
 
 **Action format**: The `/step` endpoint expects parsed JSON fields directly
