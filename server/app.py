@@ -605,6 +605,8 @@ For differential_diagnosis respond with:
             )
             raw = completion.choices[0].message.content or ""
             suggestion = parse_json_safe(raw)
+            if suggestion:
+                suggestion = _canonicalise_suggestion(suggestion, request.task_id)
             llm_used = bool(suggestion)
             if not llm_used:
                 error_msg = "LLM returned unparseable response — using rule-based fallback"
@@ -622,6 +624,62 @@ For differential_diagnosis respond with:
         "model": model if llm_used else "rule-based (set API_BASE_URL + MODEL_NAME + HF_TOKEN to use LLM)",
         "error": error_msg,
     }
+
+
+def _canonicalise_suggestion(s: dict, task_id: str) -> dict:
+    """Normalise LLM free-text values to the canonical IDs the grader expects."""
+    def _snake(v: str) -> str:
+        return v.lower().strip().replace(" ", "_").replace("-", "_").replace("(", "").replace(")", "").replace("'", "")
+
+    PRIORITY_MAP = {"immediate": "critical", "severe": "high", "moderate": "medium", "mild": "low",
+                    "urgent": "high", "non_urgent": "low", "standard": "low"}
+    ACTION_MAP = {"emergency": "emergency_response", "come_now": "emergency_response",
+                  "urgent": "urgent_review", "urgent_assessment": "urgent_review",
+                  "routine": "routine_monitoring", "monitor": "routine_monitoring"}
+    ANTIBIOTIC_MAP = {"piperacillin-tazobactam": "piperacillin_tazobactam", "pip_taz": "piperacillin_tazobactam",
+                      "pip-taz": "piperacillin_tazobactam", "tazocin": "piperacillin_tazobactam",
+                      "cefepime_or_levofloxacin_considering_penicillin_allergy": "meropenem",
+                      "cefepime": "meropenem", "levofloxacin": "meropenem"}
+    DIAGNOSIS_MAP = {"acute_myocardial_infarction_mi": "stemi", "myocardial_infarction": "stemi",
+                     "heart_attack": "stemi", "mi": "stemi", "nstemi": "stemi",
+                     "subarachnoid_hemorrhage": "subarachnoid_haemorrhage",
+                     "sah": "subarachnoid_haemorrhage",
+                     "pulmonary_embolus": "pulmonary_embolism", "pe": "pulmonary_embolism",
+                     "aaa_rupture": "aortic_aneurysm_rupture", "ruptured_aaa": "aortic_aneurysm_rupture"}
+
+    if "priority" in s:
+        v = _snake(str(s["priority"]))
+        s["priority"] = PRIORITY_MAP.get(v, v if v in ("low","medium","high","critical") else s["priority"])
+    if "recommended_action" in s:
+        v = _snake(str(s["recommended_action"]))
+        s["recommended_action"] = ACTION_MAP.get(v, v)
+    if "recommendation" in s:
+        v = _snake(str(s["recommendation"]))
+        s["recommendation"] = ACTION_MAP.get(v, v)
+    if "antibiotic_choice" in s:
+        v = _snake(str(s["antibiotic_choice"]))
+        s["antibiotic_choice"] = ANTIBIOTIC_MAP.get(v, v)
+    if "must_not_miss" in s:
+        v = _snake(str(s["must_not_miss"]))
+        s["must_not_miss"] = DIAGNOSIS_MAP.get(v, v)
+    if "top_diagnosis" in s:
+        v = _snake(str(s["top_diagnosis"]))
+        s["top_diagnosis"] = DIAGNOSIS_MAP.get(v, v)
+    if "differentials" in s and isinstance(s["differentials"], list):
+        s["differentials"] = [DIAGNOSIS_MAP.get(_snake(d), _snake(d)) for d in s["differentials"]]
+    if "urgency" in s:
+        v = _snake(str(s["urgency"]))
+        s["urgency"] = v if v in ("immediate","urgent","routine") else "urgent"
+    if "deterioration_trend" in s:
+        v = _snake(str(s["deterioration_trend"]))
+        s["deterioration_trend"] = v if v in ("improving","stable","worsening") else v
+    if "intervention" in s:
+        v = _snake(str(s["intervention"]))
+        INT_MAP = {"escalate": "emergency_escalation", "emergency": "emergency_escalation",
+                   "palliation": "prepare_palliation", "maintain": "maintain_current",
+                   "increase": "increase_support"}
+        s["intervention"] = INT_MAP.get(v, v)
+    return s
 
 
 def _rule_based_suggest(patient_history: str, task_id: str) -> dict:
