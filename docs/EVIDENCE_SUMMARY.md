@@ -8,7 +8,7 @@ Canonical status source for evaluator-facing claims.
 - Environment version: `v2.3.0`
 - Tasks/Cases: `11 tasks / 75 cases`
 - Reward API contract: open interval `(0.0001, 0.9999)`
-- Test baseline (latest recorded local full-suite run): `345 collected, 331 passed, 14 skipped`
+- Test baseline (latest recorded local full-suite run): `348 collected, 334 passed, 14 skipped`
 
 ## 2) Validation Status (fresh restamp: 2026-04-14 UTC, production)
 

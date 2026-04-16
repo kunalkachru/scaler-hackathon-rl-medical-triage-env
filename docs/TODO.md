@@ -1,6 +1,6 @@
 # TODO: Round 1 enhancement roadmap (merged plan)
 
-**Status:** v2.3.0 — latest local gate: 345 collected, 331 passed, 14 skipped. Staging validation and full release gate are green.
+**Status:** v2.3.0 — latest local gate: 348 collected, 334 passed, 14 skipped. Staging validation and full release gate are green.
 
 This document merges:
 

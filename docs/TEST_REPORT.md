@@ -3,12 +3,13 @@
 **Date:** 2026-04-14 (latest validated snapshot)  
 **Environment:** Medical Triage Environment v2.3.0  
 **Python:** 3.12.3 | **pytest:** 9.0.2  
-**Core Suite Tests:** 103 | **Passed:** 103 | **Failed:** 0  
-**Current Full Suite Status:** 345 collected, 331 passed, 14 skipped (`pytest tests/ -q`)  
+**Core Suite Tests (historical narrative subset):** 103 | **Passed:** 103 | **Failed:** 0  
+**Current Full Suite Status:** 348 collected, 334 passed, 14 skipped (`pytest tests/ -q`)  
 **Core Suite Run time:** ~0.4s  
 
 > Note: This report is a deep-dive narrative for foundational grader/environment suites.  
 > For latest evaluator workflow and full project validation, use `README.md`, `docs/TECHNICAL_REPORT.md`, and run `pytest tests/ -q`.
+> Any smaller totals shown in legacy sections below are historical snapshots preserved for traceability.
 
 > **API vs grader scores:** `grade_response` / `grade_*` outputs stay in **`[0, 1]`**. The **`MedicalTriageEnvironment`** and **`/grade-fairness`** return **`reward` / `observation.score` in the open interval `(0, 1)`** (`task_score_for_api` in `models.py`). `reset()` returns the open-interval floor (`0.0001`). Narrative examples below mix internal magnitudes (e.g. “1.0”) with HTTP behaviour (e.g. “≈ 0.9999”); see current tests in `tests/test_environment.py` and `tests/test_api_contract.py`.
 
@@ -54,7 +55,7 @@ pytest tests/test_ui_contract.py -v
 | UI Contract | `test_ui_contract.py` | 8 | ✅ All Pass | Web UI contract + regression guards |
 | Baseline Inference Contract | `test_inference_contract.py` | 3 | ✅ All Pass | Guards `inference.py` baseline reproducibility flow |
 
-**Total (listed above): 112 tests — 112 passed, 0 failed**
+**Total (listed above, historical subset): 112 tests — 112 passed, 0 failed**
 
 ---
 
@@ -763,12 +764,12 @@ Task 3, MD001. Expert agent detects bisoprolol masking.
 
 ---
 
-## Final Summary
+## Historical Summary Snapshot
 
 ```
-Core suite: 96 passed | 0 failed | 0 skipped
+Core suite (historical subset): 96 passed | 0 failed | 0 skipped
 Core suite run time: 0.38s
-Current full suite: 99 passed
+Current full suite: 348 collected | 334 passed | 14 skipped
 
 All OpenEnv spec requirements verified:
   ✅ reset() → returns observation, reward=0.0, done=False
@@ -882,7 +883,7 @@ Current runtime supports 11 tasks and 75 cases. Authoritative checks now live in
 ## Final Summary (v2.3)
 
 ```
-345 tests collected | 331 passed | 14 skipped
+348 tests collected | 334 passed | 14 skipped
 Runtime local/full gates: pytest + openenv validate + docker smoke ✅
 Staging gates: release gate + live verify + browser smoke + full browser suite ✅
 
@@ -899,7 +900,7 @@ Under-triage correctly penalized harder than over-triage ✅
 ## Final Verification Evidence (Submission Gate)
 
 Local validation gates:
-- `pytest tests/ -q` → 119 passed
+- `pytest tests/ -q` → 348 collected, 334 passed, 14 skipped
 - `openenv validate` → `[OK] Ready for multi-mode deployment`
 - `./scripts/pre_submit_check.sh` → all checks passed
 

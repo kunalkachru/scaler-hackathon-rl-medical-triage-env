@@ -5,7 +5,7 @@
 **Live Space:** https://huggingface.co/spaces/kunalkachru23/medical-triage-env  
 **API URL:** https://kunalkachru23-medical-triage-env.hf.space  
 **GitHub:** https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env  
-**Tests (latest local gate):** 345 collected, 331 passed, 14 skipped
+**Tests (latest local gate):** 348 collected, 334 passed, 14 skipped
 
 > NOTE: This document started as an early-phase runbook. For current implementation truth, prefer `README.md`, `openenv.yaml`, and `docs/TECHNICAL_REPORT.md`.
 
@@ -399,7 +399,7 @@ Demonstrates the environment supports training, not just evaluation:
 ```bash
 # Full suite
 pytest tests/ -q
-# Latest local gate: 345 collected, 331 passed, 14 skipped
+# Latest local gate: 348 collected, 334 passed, 14 skipped
 
 # By module
 pytest tests/test_graders.py -v
@@ -652,7 +652,7 @@ openenv validate .
 **Step 2 — Run tests:**
 ```bash
 pytest tests/ -q
-# Expected: 119 passed
+# Expected: 348 collected, 334 passed, 14 skipped
 ```
 
 **Step 3 — Test the live Space:**

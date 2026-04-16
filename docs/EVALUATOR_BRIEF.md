@@ -20,6 +20,12 @@ It targets clinically documented failure modes:
 - open-interval reward contract on API `(0.0001, 0.9999)` for OpenEnv compatibility
 - multi-turn deterioration task (`max_steps_per_episode: 3`)
 
+## 2b) Training evidence (at a glance)
+
+The graph below is from a GRPO training run against the live reward oracle, demonstrating end-to-end model adaptation using this environment.
+
+![GRPO training diagnostics snapshot](../training_artifacts/training_report_clean_20260414-184320.png)
+
 ## 3) Task map (at a glance)
 
 - `simple_triage` (easy)
@@ -64,6 +70,14 @@ Operational behavior:
 - machine-readable evidence artifacts:
   - `artifacts/gates/pre_submit_check_summary.json`
   - `artifacts/gates/full_release_gate_summary.json`
+
+## 5b) Training demonstration status
+
+- This project demonstrates both:
+  - RL environment evaluation (`reset/step/state`, deterministic grading), and
+  - end-to-end model adaptation via LoRA + GRPO (`grpo_train.py` and `notebooks/grpo_colab.ipynb`).
+- GRPO is run against the live environment reward oracle, proving the system supports actual policy improvement workflows, not only static benchmarking.
+- Training evidence artifacts and metrics are tracked in `docs/EVIDENCE_SUMMARY.md` and `training_artifacts/`.
 
 ## 6) Evidence and metrics source of truth
 

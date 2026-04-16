@@ -379,7 +379,7 @@ reward function incentivises vitals-only decision-making, penalising demographic
 
 ### 7.2 Test Suite
 
-Latest local gate: 345 tests collected, 331 passed, 14 skipped.
+Latest local gate: 348 tests collected, 334 passed, 14 skipped.
 
 | File | Scope |
 |---|---|

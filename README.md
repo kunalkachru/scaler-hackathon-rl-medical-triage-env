@@ -22,8 +22,18 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
 | **Version** | v2.3.0 |
 | **Tasks** | 11 (75 cases) |
-| **Tests** | 345 collected (latest local run: 331 passed, 14 skipped) |
+| **Tests** | 348 collected (latest local run: 334 passed, 14 skipped) |
 | **RL Dataset** | https://huggingface.co/datasets/kunalkachru23/medical-triage-triples |
+
+### Training Evidence Snapshot
+
+End-to-end GRPO model training was run against the live reward oracle (not just static evaluation).
+
+<p align="center">
+  <img src="training_artifacts/training_report_clean_20260414-184320.png" alt="GRPO training diagnostics snapshot" width="980">
+</p>
+
+See `training_artifacts/metrics_20260414-184320.json` and `docs/EVIDENCE_SUMMARY.md` for machine-readable metrics and validation context.
 
 ### Try it in 30 seconds (Evaluator quick path)
 
@@ -439,7 +449,7 @@ venv/bin/python -m pytest tests/test_client_scripts.py -v
 venv/bin/python -m pytest tests/ --collect-only -q
 ```
 
-**Current status (latest local gate):** 345 tests collected, 331 passed, 14 skipped (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
+**Current status (latest local gate):** 348 tests collected, 334 passed, 14 skipped (`pytest tests/ -q`). See [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md) for detailed test rationale and case-wise validation notes.
 
 Run pre-submit validator:
 

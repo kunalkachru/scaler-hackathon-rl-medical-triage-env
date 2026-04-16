@@ -303,7 +303,7 @@ Functional content:
 `tests/test_inference_contract.py`:
 - baseline inference reproducibility guards (symbol wiring + required env checks).
 
-Latest local gate: **345 tests collected, 331 passed, 14 skipped.**
+Latest local gate: **348 tests collected, 334 passed, 14 skipped.**
 
 ## 5) Cross-File Dependency Map
 
