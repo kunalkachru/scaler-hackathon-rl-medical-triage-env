@@ -10,6 +10,8 @@ EXPECT_LLM="true"
 SKIP_DEPLOY="false"
 SKIP_PLAYWRIGHT_INSTALL="false"
 RESUME_RUN="false"
+ORIGINAL_ARGS=("$@")
+SCRIPT_COMMAND="./scripts/final_submission_check.sh ${ORIGINAL_ARGS[*]}"
 
 START_EPOCH="$(date +%s)"
 STATE_DIR="${ROOT_DIR}/artifacts/gates"
@@ -72,7 +74,7 @@ write_summary() {
   local end_epoch
   end_epoch="$(date +%s)"
   local duration_sec=$(( end_epoch - START_EPOCH ))
-  python - "$SUMMARY_FILE" "$status" "$duration_sec" "$failed_stage" "$exit_code" "$CHECKPOINT_FILE" "$BASE_URL" "$REPO_ID" <<'PY'
+  python - "$SUMMARY_FILE" "$status" "$duration_sec" "$failed_stage" "$exit_code" "$CHECKPOINT_FILE" "$BASE_URL" "$REPO_ID" "$SCRIPT_COMMAND" <<'PY'
 import datetime
 import json
 import pathlib
@@ -86,13 +88,14 @@ exit_code = int(sys.argv[5])
 checkpoint_file = pathlib.Path(sys.argv[6])
 base_url = sys.argv[7]
 repo_id = sys.argv[8]
+command = sys.argv[9]
 
 stages = []
 if checkpoint_file.exists():
     stages = [ln.strip() for ln in checkpoint_file.read_text().splitlines() if ln.strip()]
 
 payload = {
-    "command": " ".join(sys.argv),
+    "command": command.strip(),
     "status": status,
     "duration_sec": duration_sec,
     "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
