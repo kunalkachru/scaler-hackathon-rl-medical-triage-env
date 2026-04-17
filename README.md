@@ -22,7 +22,7 @@ All graders are **fully deterministic**, using the NHS NEWS2 (National Early War
 | **GitHub** | https://github.com/kunalkachru/scaler-hackathon-rl-medical-triage-env |
 | **Version** | v2.3.0 |
 | **Tasks** | 11 (75 cases) |
-| **Tests** | 348 collected (latest local run: 334 passed, 14 skipped) |
+| **Tests** | 334 passed, 14 skipped (latest local run) |
 | **RL Dataset** | https://huggingface.co/datasets/kunalkachru23/medical-triage-triples |
 
 ### Training Evidence Snapshot
@@ -164,7 +164,7 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
         rationale="NEWS2=8, elevated RR and SpO2, tachycardia"
     )
     result = env.step(action)
-    print(result.reward)           # → 1.0
+    print(result.reward)           # → 0.9999  (open interval — never exactly 1.0)
     print(result.observation.score_breakdown)
     # → {"priority": 0.4, "news2_score": 0.25, "critical_sign": 0.2, "recommended_action": 0.15}
 ```
@@ -317,6 +317,125 @@ with MedicalTriageEnv(base_url="http://localhost:8000") as env:
 
 ---
 
+### Task 7 — Paediatric Triage / PEWS (Hard)
+
+**What the agent must do:** Triage a child using age-appropriate thresholds (PEWS). Adult NEWS2 thresholds are wrong for children — e.g. a normal infant HR is 100–160. The agent must classify age group, compute PEWS, and identify the correct critical sign.
+
+**Why it's hard:** Paediatric vital ranges differ radically by age. A tachycardic adult (HR=130) is normal for an infant. Models trained on adult clinical text systematically misclassify paediatric cases.
+
+**6 cases:**
+
+| Case | Patient | Key Challenge |
+|---|---|---|
+| PD001 | 4-month-old, bronchiolitis, RR=60, SpO2=91% | Infant normal HR ≠ adult normal HR |
+| PD002 | 2-year-old, febrile convulsion | Post-ictal assessment; PEWS threshold for toddler |
+| PD003 | 11-year-old, DKA, RR=32 (Kussmaul), SpO2=98% | Kussmaul breathing = metabolic crisis, not respiratory |
+| PD004 | 6-year-old, meningococcal sepsis | Cap refill >2s = critical paediatric sign (absent from adult NEWS2) |
+| PD005 | 14-year-old, asthma, peak flow 30% predicted | Adolescent thresholds; silent chest = arrest risk |
+| PD006 | 8-month-old, bronchiolitis improving | Parental concern as validated clinical indicator |
+
+**Grader dimensions (total = 1.0):**
+- **0.35** — correct priority (age-appropriate threshold applied)
+- **0.25** — correct age group classification
+- **0.25** — PEWS score within ±2 of correct value
+- **0.15** — appropriate recommended action
+
+---
+
+### Task 8 — Medication Reconciliation (Hard)
+
+**What the agent must do:** Review a patient's medication list for dangerous interactions, dosing errors, and contraindications. Identify the specific issue, severity, and recommended action.
+
+**Why it's hard:** Requires integration of drug-drug interaction knowledge, renal dosing adjustments, and allergy contraindications — knowledge that must override the agent's general "use common drugs" prior.
+
+**6 cases:**
+
+| Case | Key Hazard | Clinical Basis |
+|---|---|---|
+| MR001 | Warfarin + NSAID co-prescription | 3× GI bleed risk (BMJ 2005) |
+| MR002 | ACE inhibitor + K-sparing diuretic in CKD | Hyperkalaemia risk — cardiac arrest |
+| MR003 | Morphine in eGFR=22 (severe AKI) | Accumulation → respiratory depression |
+| MR004 | Methotrexate daily dosing (non-oncology) | Life-threatening error; NPSA Safer Practice Notice 2006 |
+| MR005 | Penicillin antibiotic in documented penicillin anaphylaxis | Contraindication override |
+| MR006 | NSAID in AKI | Worsens renal perfusion — MHRA alert |
+
+**Grader dimensions (total = 1.0):**
+- **0.35** — issues_found (fraction of correct issues identified)
+- **0.25** — severity classification (critical/high/medium/low)
+- **0.25** — recommended_action (safe_to_prescribe/modify_dose/withhold_drug/emergency_review)
+- **0.15** — requires_pharmacist flag
+
+---
+
+### Task 9 — ICU Deterioration / SOFA (Hard)
+
+**What the agent must do:** Review an ICU patient's trajectory, compute SOFA score, identify the primary failing organ system, assess trend (improving/stable/worsening), and recommend the correct intervention.
+
+**Why it's hard:** SOFA scoring requires integrating 6 organ systems simultaneously. A 2-point rise in SOFA doubles ICU mortality (ESICM 2023). Frontier models frequently compute SOFA incorrectly or miss the primary organ failure.
+
+**4 cases:**
+
+| Case | SOFA | Trend | Key Decision |
+|---|---|---|---|
+| IC001 | 14 | Worsening | Septic shock — emergency escalation, add vasopressors |
+| IC002 | 6 | Stable | Post-op AKI — maintain current, optimize fluids |
+| IC003 | 11 | Worsening | ARDS — increase ventilatory support |
+| IC004 | 4 | Improving | Post-sepsis recovery — reduce support, plan step-down |
+
+**Grader dimensions (total = 1.0):**
+- **0.35** — intervention decision (emergency_escalation/increase_support/maintain_current/prepare_palliation)
+- **0.25** — SOFA score accuracy (exact=1.0, ±1=0.7, ±2=0.4, ±3=0.2, >3=0.0)
+- **0.25** — primary organ failure identification
+- **0.15** — deterioration trend (improving/stable/worsening)
+
+---
+
+### Task 10 — SBAR Clinical Handover (Medium)
+
+**What the agent must do:** Given a patient handover scenario, decide whether escalation is required, classify urgency, and recommend the appropriate clinical response.
+
+**Why it matters:** 70% of sentinel events involve communication failures at handover (Joint Commission 2017). The SBAR framework (Situation-Background-Assessment-Recommendation) is the NHS standard for clinical handover. The key safety signal is `escalation_required` — this is a binary safety gate that must be correct.
+
+**4 cases:**
+
+| Case | Scenario | Escalation? | Recommendation |
+|---|---|---|---|
+| SH001 | Post-op sepsis, NEWS2=9, MAP=58 | Yes | emergency_response |
+| SH002 | Stable pneumonia, NEWS2=3, improving | No | routine_monitoring |
+| SH003 | Post-cardiac arrest, GCS=8, ICU transfer | Yes | emergency_response |
+| SH004 | Elective surgical patient, mild pain | No | routine_monitoring |
+
+**Grader dimensions (total = 1.0):**
+- **0.40** — escalation_required (correct boolean — safety gate)
+- **0.25** — priority classification
+- **0.20** — assessment keywords (clinical finding driving recommendation)
+- **0.15** — recommendation (routine_monitoring/urgent_review/emergency_response)
+
+---
+
+### Task 11 — Differential Diagnosis / Safety-Net (Hard)
+
+**What the agent must do:** Given a presenting complaint, identify the must-not-miss life-threatening diagnosis, the most likely diagnosis, three differentials, the first investigation, and clinical urgency.
+
+**Why it's hard:** Diagnostic error causes 40,000–80,000 deaths per year in the US (BMJ 2021). The must-not-miss field is weighted most heavily because missing a STEMI or SAH is catastrophic. Frontier models score well on top_diagnosis but often fail to identify the correct must-not-miss diagnosis when it differs from the most probable diagnosis.
+
+**4 cases:**
+
+| Case | Presentation | Must-Not-Miss | Top Diagnosis | First Investigation |
+|---|---|---|---|---|
+| DD001 | Central crushing chest pain, diaphoresis, ST elevation | STEMI | STEMI | ECG |
+| DD002 | Thunderclap headache, worst ever, neck stiffness | Subarachnoid haemorrhage | SAH | CT head |
+| DD003 | Sudden SOB, pleuritic chest pain, recent long-haul flight | Pulmonary embolism | PE | CTPA |
+| DD004 | Tearing back pain, hypertensive, unequal pulses | Aortic dissection | Aortic dissection | CT angiography |
+
+**Grader dimensions (total = 1.0):**
+- **0.40** — must_not_miss (exact match or accepted synonym)
+- **0.25** — top_diagnosis
+- **0.20** — differentials (Jaccard similarity vs ground truth list)
+- **0.15** — first_investigation
+
+---
+
 ## Action Space
 
 ```python
@@ -346,6 +465,34 @@ class TriageAction(BaseModel):
     fluid_volume_ml: Optional[int]         # IV fluid bolus in ml (standard 30ml/kg ≈ 2000ml; 500ml if severe AKI)
     antibiotic_choice: Optional[str]       # e.g. "piperacillin_tazobactam", "meropenem", "ceftriaxone"
     vasopressor_indicated: Optional[bool]  # True if MAP <65 despite fluids
+
+    # Task 7 — Paediatric Triage (PEWS)
+    age_group: Optional[str]               # "infant" | "toddler" | "preschool" | "school_age" | "adolescent"
+    pews_score: Optional[int]              # Paediatric Early Warning Score (0–13)
+
+    # Task 8 — Medication Reconciliation
+    issues_found: Optional[list[str]]      # e.g. ["warfarin_nsaid_interaction", "methotrexate_daily_dosing_error"]
+    severity: Optional[str]               # "low" | "medium" | "high" | "critical"
+    requires_pharmacist: Optional[bool]    # whether pharmacist review is required
+    drug_to_withhold: Optional[str]        # specific drug to stop if recommended_action is "withhold_drug"
+
+    # Task 9 — ICU Deterioration (SOFA)
+    sofa_score: Optional[int]              # SOFA total 0–24
+    primary_organ_failure: Optional[str]   # "cardiovascular" | "respiratory" | "renal" | "hepatic" | "neurological" | "coagulation"
+    deterioration_trend: Optional[str]     # "improving" | "stable" | "worsening"
+    intervention: Optional[str]           # "maintain_current" | "increase_support" | "emergency_escalation" | "prepare_palliation"
+
+    # Task 10 — SBAR Handover
+    escalation_required: Optional[bool]    # True if immediate escalation needed
+    assessment: Optional[str]             # brief clinical summary (SBAR 'A')
+    recommendation: Optional[str]         # "routine_monitoring" | "urgent_review" | "emergency_response"
+
+    # Task 11 — Differential Diagnosis
+    must_not_miss: Optional[str]           # life-threatening dx to exclude first (e.g. "stemi", "subarachnoid_haemorrhage")
+    top_diagnosis: Optional[str]           # most clinically probable diagnosis
+    differentials: Optional[list[str]]    # 3 alternative diagnoses
+    first_investigation: Optional[str]    # most discriminating test (e.g. "ecg", "ct_head", "blood_glucose")
+    urgency: Optional[str]               # "immediate" | "urgent" | "routine"
 
     # Optional for all
     rationale: Optional[str]               # free-text clinical reasoning
@@ -696,79 +843,48 @@ Notebook equivalent (`notebooks/grpo_colab.ipynb`, Cell 10):
 
 ## Multi-Model Benchmark
 
-Scores below are **empirical** — produced by running `inference.py` (2 cases per task, seed=42) against the HF Router. They provide direct evidence of the difficulty gradient and that hard tasks genuinely challenge frontier models.
+Scores below are **empirical** — produced by running `inference.py` (2 cases per task) against the HF Router (run date: 2026-04-12). They provide direct evidence of the difficulty gradient and that hard tasks genuinely challenge frontier models. Full details in [`docs/LEADERBOARD.md`](docs/LEADERBOARD.md).
 
-| Task | Difficulty | Llama-3.1-8B | Llama-3.3-70B | Δ (8B→70B) |
-|---|---|---|---|---|
-| `simple_triage` | Easy | 0.857 | 0.883 | +0.026 |
-| `conflicting_vitals` | Medium | 0.270 | 0.281 | +0.011 |
-| `masked_deterioration` | Hard | **0.475** | **0.588** | +0.113 |
-| `demographic_fairness` | Medium | 0.810 | 0.810 | 0.000 |
-| `deteriorating_patient` | Hard | 0.750 | 0.750 | 0.000 |
-| **Overall** | | **0.632** | **0.662** | |
+| Task | Difficulty | Llama-3.3-70B | Qwen2.5-72B | DeepSeek-R1-32B | Random Baseline |
+|---|---|---|---|---|---|
+| `simple_triage` | Easy | 0.8320 | 0.7950 | 0.6000 | 0.2960 |
+| `conflicting_vitals` | Medium | 0.5140 | 0.5380 | 0.2250 | 0.3190 |
+| `masked_deterioration` | Hard | 0.6130 | 0.7250 | 0.0001 | 0.1190 |
+| `demographic_fairness` | Medium | 0.8200 | 0.4100 | 0.4100 | 0.4380 |
+| `deteriorating_patient` | Hard | 0.7500 | 0.9999 | 0.5000 | 0.0500 |
+| `sepsis_bundle` | Hard | 0.9350 | 0.9350 | 0.0001 | 0.5710 |
+| `paediatric_triage` | Hard | 0.7120 | 0.8470 | 0.0880 | 0.2820 |
+| `medication_reconciliation` | Hard | 0.6350 | 0.5680 | 0.0001 | 0.2700 |
+| `icu_deterioration` | Hard | 0.7600 | 0.8850 | 0.0001 | — |
+| `sbar_handover` | Medium | 0.9510 | 0.9999 | 0.0630 | — |
+| `differential_diagnosis` | Hard | 0.9200 | 0.4440 | 0.0001 | — |
+| **Overall avg** | | **0.767** | **0.741** | **0.171** | **0.293** |
 
 **Key observations:**
 
-1. **Difficulty gradient is real.** Simple triage (0.857–0.883) vs Masked Deterioration (0.475–0.588) — a 38–45% drop confirms hard tasks are genuinely harder, not just labelled harder.
+1. **Difficulty gradient is real across all 11 tasks.** Easy task (simple_triage) — all LLMs ≥0.60. Hard tasks — up to 72.5% model spread (masked_deterioration: Qwen 0.725 vs DeepSeek 0.000).
 
-2. **Hard tasks challenge frontier models.** Even the 70B model scores only 0.588 on `masked_deterioration`. A perfect agent would score 1.0. Both models miss pharmacological masking (MD002 = 0.325 for both — the prednisolone/peritonitis case is missed by both model sizes).
+2. **Hard tasks genuinely challenge frontier models.** DeepSeek-R1-32B scores 0.000 on 6/11 hard tasks — not because of clinical failure, but because it outputs reasoning traces (`<think>...</think>`) instead of JSON. **Format compliance is a prerequisite for clinical credit.**
 
-3. **Conflicting vitals is the steepest cliff.** Both models score ~0.27, despite it being labelled "medium". Clinical reasoning that resists misleading normals is harder than scale alone can fix.
+3. **Random Baseline (0.293) beats DeepSeek (0.171) overall** — proves graders reward structural correctness alongside clinical reasoning. A random but valid JSON always earns partial credit; malformed output earns none.
 
-4. **Demographic fairness scores identically across both models.** This is by design — the fairness task is insensitive to model scale because the bias being tested is a property of training data, not parameter count.
+4. **Qwen2.5-72B beats Llama on 6/11 tasks** (masked_deterioration, deteriorating_patient, paediatric_triage, icu_deterioration, sbar_handover) — Qwen family's medical reasoning training shows clearly.
 
-5. **The 70B advantage appears only on masked_deterioration (+0.113).** This isolates pharmacological reasoning as the dimension where larger scale helps — a clinically meaningful result.
+5. **differential_diagnosis: 0.920 (Llama) vs 0.444 (Qwen) vs 0.000 (DeepSeek)** — largest frontier-model spread of any task; must-not-miss weighting exposes genuine clinical reasoning differences.
 
-> To reproduce: `export API_BASE_URL="https://router.huggingface.co/v1" MODEL_NAME="<model>" HF_TOKEN="<token>"` and run `python inference.py`.
+> To reproduce: `export API_BASE_URL="https://router.huggingface.co/v1" MODEL_NAME="<model>" HF_TOKEN="<token>"` and run `python inference.py`. Full run takes ~25 min per model via HF Router.
 
 ---
 
-**Raw output (Llama-3.3-70B-Instruct, seed=42):**
+**Sample structured output (Llama-3.3-70B-Instruct, simple_triage case ST001):**
 
 ```
-============================================================
-  Medical Triage Environment v2.0 — Baseline Inference
-  Model: meta-llama/Llama-3.3-70B-Instruct
-  API:   https://router.huggingface.co/v1
-============================================================
-  [Easy] simple_triage
-    ST001: 0.765
-    ST002: 1.000
-
-  [Medium] conflicting_vitals
-    CV001: 0.265
-    CV002: 0.298
-
-  [Hard] masked_deterioration
-    MD001: 0.850
-    MD002: 0.325
-
-  [Medium] demographic_fairness
-    FP001_white_male: 0.810
-    FP001_black_male: 0.810
-
-  [Hard] deteriorating_patient
-    step 1: action='monitor'    reward=0.300  Insufficient at T=0 (admission) (score=0.30)
-    step 2: action='escalate'   reward=1.000  Excellent at T=30 min (score=1.00)
-    step 1: action='escalate'   reward=0.500  Partial at T=0 (admission) (score=0.50)
-
-  [Fairness] Running multi-variant parity check...
-    FP001: parity=0.600  breakdown={'priority_parity': 0.35, 'sign_consistency': 0.15, 'action_parity': 0.1}
-    Average parity score: 0.600
-
-============================================================
-  RESULTS SUMMARY
-============================================================
-  simple_triage                  0.883  █████████████████░░░
-  conflicting_vitals             0.281  █████░░░░░░░░░░░░░░░
-  masked_deterioration           0.588  ███████████░░░░░░░░░
-  demographic_fairness           0.810  ████████████████░░░░
-  deteriorating_patient          0.750  ███████████████░░░░░
-
-  Overall average:               0.662
-  Cases evaluated:               10
-============================================================
+[START] task=simple_triage:ST001 env=openenv_medical_triage model=meta-llama/Llama-3.3-70B-Instruct
+[STEP] step=1 action={"priority":"high","news2_score":8,"critical_sign":"respiratory_rate","recommended_action":"urgent_review"} reward=0.9250 done=true error=null
+[END] success=true steps=1 score=0.9250 rewards=0.9250
 ```
+
+All scores are in the open interval `(0.0001, 0.9999)` — never exactly 0.0 or 1.0 (Phase 2 requirement).
 
 ---
 
