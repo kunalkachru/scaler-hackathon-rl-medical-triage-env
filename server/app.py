@@ -570,7 +570,7 @@ For paediatric_triage respond with:
   {"priority":"low|medium|high|critical","age_group":"infant|toddler|preschool|school_age|adolescent","pews_score":<int 0-13>,"critical_sign":"<vital_name>","recommended_action":"routine_monitoring|urgent_review|emergency_response","rationale":"...","confidence":<0.0-1.0>}
 
 For medication_reconciliation respond with:
-  {"issues_found":["<issue>"],"severity":"critical|high|moderate|low","requires_pharmacist":true|false,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","drug_to_withhold":"<drug or none>","rationale":"...","confidence":<0.0-1.0>}
+  {"issues_found":["<issue>"],"severity":"critical|high|medium|low","requires_pharmacist":true|false,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","drug_to_withhold":"<drug or none>","rationale":"...","confidence":<0.0-1.0>}
 
 For icu_deterioration respond with:
   {"sofa_score":<int 0-24>,"primary_organ_failure":"cardiovascular|respiratory|renal|hepatic|neurological|coagulation","deterioration_trend":"improving|stable|worsening","intervention":"maintain_current|increase_support|emergency_escalation|prepare_palliation","rationale":"..."}
@@ -650,8 +650,7 @@ def _canonicalise_suggestion(s: dict, task_id: str) -> dict:
                   "routine": "routine_monitoring", "monitor": "routine_monitoring"}
     ANTIBIOTIC_MAP = {"piperacillin-tazobactam": "piperacillin_tazobactam", "pip_taz": "piperacillin_tazobactam",
                       "pip-taz": "piperacillin_tazobactam", "tazocin": "piperacillin_tazobactam",
-                      "cefepime_or_levofloxacin_considering_penicillin_allergy": "meropenem",
-                      "cefepime": "meropenem", "levofloxacin": "meropenem"}
+                      "cefepime_or_levofloxacin_considering_penicillin_allergy": "levofloxacin"}
     DIAGNOSIS_MAP = {"acute_myocardial_infarction_mi": "stemi", "myocardial_infarction": "stemi",
                      "heart_attack": "stemi", "mi": "stemi", "nstemi": "stemi",
                      "subarachnoid_hemorrhage": "subarachnoid_haemorrhage",

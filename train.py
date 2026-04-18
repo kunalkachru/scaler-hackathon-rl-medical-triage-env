@@ -96,7 +96,7 @@ For demographic_fairness, respond with:
   {"priority":"low|medium|high|critical","news2_score":<int>,"critical_sign":"<param>","recommended_action":"emergency_response|urgent_review|routine_monitoring","rationale":"<reasoning>","confidence":<0-1>}
 
 For deteriorating_patient, respond with:
-  {"action":"monitor|escalate|emergency_response|comfort_care","rationale":"<reasoning>","confidence":<0-1>}
+  {"action":"monitor|escalate|emergency_response","rationale":"<reasoning>","confidence":<0-1>}
 
 For sepsis_bundle, respond with:
   {"priority":"high|critical","bundle_elements":["blood_cultures","broad_spectrum_antibiotics","iv_fluid_bolus","lactate_measurement","vasopressors"],"antibiotic_choice":"<drug>","fluid_volume_ml":<int>,"vasopressor_indicated":<bool>,"rationale":"<reasoning>","confidence":<0-1>}
@@ -106,6 +106,15 @@ For paediatric_triage, respond with:
 
 For medication_reconciliation, respond with:
   {"issues_found":["<issue>"],"severity":"low|medium|high|critical","requires_pharmacist":<bool>,"recommended_action":"safe_to_prescribe|modify_dose|withhold_drug|emergency_review","drug_to_withhold":"<drug_or_null>","rationale":"<reasoning>","confidence":<0-1>}
+
+For icu_deterioration, respond with:
+  {"sofa_score":<int 0-24>,"primary_organ_failure":"cardiovascular|respiratory|renal|hepatic|neurological|coagulation","deterioration_trend":"improving|stable|worsening","intervention":"maintain_current|increase_support|emergency_escalation|prepare_palliation","rationale":"<reasoning>"}
+
+For sbar_handover, respond with:
+  {"escalation_required":true|false,"priority":"low|medium|high|critical","assessment":"<brief clinical summary>","recommendation":"routine_monitoring|urgent_review|emergency_response"}
+
+For differential_diagnosis, respond with:
+  {"must_not_miss":"<life-threatening diagnosis>","top_diagnosis":"<most likely>","differentials":["<dx1>","<dx2>","<dx3>"],"first_investigation":"<key test>","urgency":"immediate|urgent|routine"}
 """
 
 IMPROVEMENT_ADVICE = {
@@ -152,6 +161,26 @@ IMPROVEMENT_ADVICE = {
         "penicillin allergy = amoxicillin/co-amoxiclav contraindicated. "
         "If issues_found score low: list ALL interactions present, not just the most obvious one. "
         "If severity wrong: methotrexate daily error and anaphylaxis risk = critical."
+    ),
+    "icu_deterioration": (
+        "SOFA score: each of 6 organ systems scored 0-4; total 0-24. Score ≥2 = organ dysfunction, ≥11 = very high mortality. "
+        "If sofa_score is wrong: check PaO2/FiO2, MAP, creatinine, bilirubin, platelet, GCS carefully. "
+        "If intervention wrong: emergency_escalation for SOFA ≥11 or acute deterioration; prepare_palliation only if futile care ceiling reached. "
+        "If primary_organ_failure wrong: identify the single most severely failing system."
+    ),
+    "sbar_handover": (
+        "escalation_required=true if: GCS drop ≥2, MAP <65, RR >25, SpO2 <92%, new organ failure, or NEWS2 ≥7. "
+        "emergency_response if immediate threat to life. urgent_review if deteriorating but not immediately life-threatening. "
+        "If escalation_required wrong: this is a safety-critical boolean — it carries 40% of the score. "
+        "assessment must mention the key clinical finding driving the recommendation."
+    ),
+    "differential_diagnosis": (
+        "must_not_miss is the life-threatening diagnosis to EXCLUDE FIRST — not necessarily the most likely. "
+        "Chest pain: must_not_miss=stemi, first_investigation=ecg. "
+        "Thunderclap headache: must_not_miss=subarachnoid_haemorrhage, first_investigation=ct_head. "
+        "Sudden SOB + pleuritic pain: must_not_miss=pulmonary_embolism, first_investigation=ctpa. "
+        "Tearing back pain: must_not_miss=aortic_dissection, first_investigation=ct_angiography. "
+        "If must_not_miss score low: this carries 40% of the score — get the safety-net diagnosis right first."
     ),
 }
 

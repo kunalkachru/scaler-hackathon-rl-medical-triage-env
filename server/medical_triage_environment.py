@@ -488,5 +488,28 @@ class MedicalTriageEnvironment:
                 "BMJ 2005: warfarin-NSAID combination raises major bleeding risk 3-fold; "
                 "MHRA Drug Safety Update 2020: NSAIDs contraindicated in AKI]"
             ),
+            "icu_deterioration": (
+                "Hint: SOFA scores each of 6 organ systems 0–4 (total 0–24). "
+                "Score ≥2 = organ dysfunction. Score ≥11 = very high mortality risk. "
+                "Check PaO2/FiO2 (respiratory), MAP/vasopressors (cardiovascular), creatinine/UO (renal), "
+                "bilirubin (hepatic), GCS (neurological), platelets (coagulation). "
+                "[Vincent et al. 1996, Intensive Care Med: SOFA; ESICM Guidelines 2023: "
+                "ICU mortality doubles per 2-point SOFA rise]"
+            ),
+            "sbar_handover": (
+                "Hint: escalation_required is the safety-critical field — 40% of score. "
+                "Trigger escalation if: GCS drop ≥2, MAP <65, RR >25, SpO2 <92%, NEWS2 ≥7, or new organ failure. "
+                "emergency_response = immediate threat to life. urgent_review = deteriorating but not immediately life-threatening. "
+                "[Joint Commission 2017: 70% of sentinel events involve communication failures at handover; "
+                "NHS SBAR Framework 2018: structured handover reduces adverse events by 30%]"
+            ),
+            "differential_diagnosis": (
+                "Hint: must_not_miss is the life-threatening diagnosis to EXCLUDE FIRST — not necessarily most likely. "
+                "Chest pain → stemi (ECG). Thunderclap headache → subarachnoid_haemorrhage (CT head). "
+                "Sudden SOB + pleuritic pain → pulmonary_embolism (CTPA). "
+                "Tearing back pain + unequal pulses → aortic_dissection (CT angiography). "
+                "[BMJ 2021: diagnostic error causes 40,000–80,000 deaths/year; "
+                "Murtagh's General Practice: must-not-miss framework for safety-net diagnosis]"
+            ),
         }
-        return hints.get(task_id, "Hint: Re-read the patient history carefully.")
+        return hints.get(task_id, "Hint: Re-read the patient history carefully and check all vital signs systematically.")

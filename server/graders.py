@@ -1670,7 +1670,7 @@ def grade_sbar_handover(agent_response: dict[str, Any], case: dict[str, Any]) ->
 
     # 1. Escalation required (0.40) — safety-critical bool
     agent_esc = agent_response.get("escalation_required")
-    expected_esc = case["escalation_required"]
+    expected_esc = case.get("escalation_required", False)
     # Accept both bool and string "true"/"false"
     if isinstance(agent_esc, str):
         agent_esc = agent_esc.lower().strip() in ("true", "yes", "1")
