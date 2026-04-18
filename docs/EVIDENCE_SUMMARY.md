@@ -1,6 +1,6 @@
 # Evidence Summary (Canonical Metrics)
 
-Last updated: 2026-04-14  
+Last updated: 2026-04-18  
 Canonical status source for evaluator-facing claims.
 
 ## 1) Snapshot
@@ -10,7 +10,7 @@ Canonical status source for evaluator-facing claims.
 - Reward API contract: open interval `(0.0001, 0.9999)`
 - Test baseline (latest recorded local full-suite run): `348 collected, 334 passed, 14 skipped`
 
-## 2) Validation Status (fresh restamp: 2026-04-14 UTC, production)
+## 2) Validation Status (fresh restamp: 2026-04-18 UTC, production)
 
 | Check Area | Command / Artifact | Latest Status |
 |---|---|---|

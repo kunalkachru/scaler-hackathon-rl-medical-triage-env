@@ -46,7 +46,7 @@ In a real emergency department, a triage nurse must decide urgency quickly from 
 | `icu_deterioration` | Hard | 4 | Single-step | SOFA framework / ICU deterioration |
 | `sbar_handover` | Medium | 4 | Single-step | NHS SBAR framework |
 | `differential_diagnosis` | Hard | 4 | Single-step | Diagnostic safety-net framework |
-| **Total** | | **28** | | |
+| **Total** | | **75** | | |
 
 ### 2.2 Core Interface
 

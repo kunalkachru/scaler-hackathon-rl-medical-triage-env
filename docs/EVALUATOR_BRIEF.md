@@ -47,14 +47,14 @@ From project root:
 ```bash
 python scripts/check_coverage.py
 ./scripts/pre_submit_check.sh
-./scripts/run_full_browser_with_retry.sh --base-url "https://<your-space>.hf.space"
-./scripts/full_release_gate.sh --base-url "https://<your-space>.hf.space" --repo-id "<user>/<space>" --expect-llm true
+./scripts/run_full_browser_with_retry.sh --base-url "https://kunalkachru23-medical-triage-env.hf.space"
+./scripts/full_release_gate.sh --base-url "https://kunalkachru23-medical-triage-env.hf.space" --repo-id "kunalkachru23/medical-triage-env" --expect-llm true
 ```
 
 Single-command go/no-go:
 
 ```bash
-./scripts/final_submission_check.sh --base-url "https://<your-space>.hf.space" --repo-id "<user>/<space>" --expect-llm true
+./scripts/final_submission_check.sh --base-url "https://kunalkachru23-medical-triage-env.hf.space" --repo-id "kunalkachru23/medical-triage-env" --expect-llm true
 ```
 
 Operational behavior:

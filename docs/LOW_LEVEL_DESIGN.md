@@ -36,7 +36,7 @@ Required OpenEnv endpoints:
 Additional product/demo endpoints:
 - `GET /tasks` -> task catalog
 - `GET /history` -> completed episode trail
-- `GET /stats` -> aggregate metrics
+- `GET /metrics` -> aggregate metrics
 - `POST /suggest` -> AI/rule-based form suggestions
 - `POST /agent-assess` -> LLM-driven assessment helper
 - `GET /web`, `GET /` -> interactive browser UI
@@ -75,7 +75,7 @@ Key endpoint handlers:
 - `reset(request: ResetRequest)`: starts episode via environment.
 - `step(request: StepRequest)`: scores action, records done episodes.
 - `get_history(limit)`: episode timeline for training chart.
-- `get_stats()`: aggregate stats for performance dashboard.
+- `get_metrics()`: aggregate stats for performance dashboard (`/metrics`).
 - `state()`: raw typed environment state.
 - `list_tasks()`: case IDs and counts from case bank.
 - `suggest_action(request)`: LLM-first suggestion with deterministic fallback.
