@@ -95,8 +95,9 @@ def check_random_baseline(root: Path, tasks: list[str]) -> list[str]:
 def check_live_verify(root: Path, tasks: list[str]) -> list[str]:
     gaps = []
     text = (root / "scripts/live_verify.sh").read_text()
-    # Skip the 8 original tasks that are covered by the generic reset/step checks
-    # New tasks (T9+) must have explicit smoke sections
+    # Tasks 1–8 (simple_triage through medication_reconciliation) are covered by the
+    # generic reset/step checks in live_verify.sh; tasks 9–11 (icu_deterioration,
+    # sbar_handover, differential_diagnosis) must have explicit smoke sections.
     IMPLICIT_TASKS = {
         "simple_triage", "conflicting_vitals", "masked_deterioration",
         "demographic_fairness", "deteriorating_patient", "sepsis_bundle",

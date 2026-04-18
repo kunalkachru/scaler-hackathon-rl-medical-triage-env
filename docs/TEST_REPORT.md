@@ -49,7 +49,7 @@ pytest tests/test_ui_contract.py -v
 | Full Episode Flows | `test_environment.py` | 4 | ✅ All Pass | |
 | Fairness Grader | `test_environment.py` | 7 | ✅ All Pass | Demographic parity across 4 variants |
 | Multi-Turn Deterioration | `test_environment.py` | 9 | ✅ All Pass | 3-step episodes, escalation reward |
-| Confidence Calibration | `test_environment.py` | 7 | ✅ All Pass | Brier-score bonus up to +0.05 |
+| Confidence Calibration | `test_environment.py` | 7 | ✅ All Pass | Brier-score bonus up to +0.10 |
 | Adversarial Robustness | `test_environment.py` | 16 | ✅ All Pass | Null fields, wrong types, empty body |
 | API Contract | `test_api_contract.py` | 9 | ✅ All Pass | Live server required |
 | UI Contract | `test_ui_contract.py` | 8 | ✅ All Pass | Web UI contract + regression guards |

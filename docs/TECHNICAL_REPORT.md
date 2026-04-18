@@ -2,7 +2,7 @@
 
 **Team Falcons — Meta × Scaler PyTorch Hackathon 2026**  
 **Submission:** `kunalkachru23/medical-triage-env`  
-**Version:** 2.3.0 | **Tasks:** 11 | **Cases:** 75 | **Tests:** 188
+**Version:** 2.3.0 | **Tasks:** 11 | **Cases:** 75 | **Tests:** 334 passed, 14 skipped (348 total)
 
 ---
 
@@ -41,7 +41,7 @@ GET  /metrics →  per-task aggregated statistics
 POST /grade-fairness  →  demographic parity breakdown
 POST /compute-news2   →  raw vitals → NEWS2 score utility
 GET  /learning-curve  →  rolling reward curve for RL dashboards
-GET  /web     →  interactive UI (8-task browser interface)
+GET  /web     →  interactive UI (11-task browser interface)
 ```
 
 The reward interval is **open**: all scores are remapped to `(0.0001, 0.9999)`

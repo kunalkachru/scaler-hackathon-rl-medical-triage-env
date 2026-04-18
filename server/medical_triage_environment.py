@@ -1,12 +1,14 @@
 """
-medical_triage_environment.py — Core Environment Logic (v2)
-============================================================
-v2.2 — 8 tasks, 63 cases:
-  - demographic_fairness, deteriorating_patient (multi-turn), sepsis_bundle,
-    paediatric_triage (PEWS), medication_reconciliation
+medical_triage_environment.py — Core Environment Logic (v2.3.0)
+===============================================================
+11 tasks, 75 cases:
+  - simple_triage, conflicting_vitals, masked_deterioration,
+    demographic_fairness, deteriorating_patient (multi-turn), sepsis_bundle,
+    paediatric_triage (PEWS), medication_reconciliation,
+    icu_deterioration (SOFA), sbar_handover, differential_diagnosis
   - confidence calibration bonus (+0.10 max)
   - asymmetric under/over-triage penalty
-  - synonym normalization for vital signs, age groups, MR actions
+  - synonym normalization for vital signs, age groups, MR actions, organ failures, diagnoses
 """
 
 import uuid

@@ -137,7 +137,6 @@ DETERIORATING_ACTION_MAP = {
     "emergency_response": "emergency_response",
     "emergency": "emergency_response",
     "code_blue": "emergency_response",
-    "comfort_care": "monitor",
 }
 URGENCY_MAP = {
     "critical": "immediate",

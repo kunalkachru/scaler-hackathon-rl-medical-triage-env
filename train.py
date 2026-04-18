@@ -453,7 +453,7 @@ def main() -> None:
         sys.exit(1)
 
     print("=" * 60)
-    print("  Medical Triage Environment v2.1 — RL Training Loop")
+    print("  Medical Triage Environment v2.3.0 — RL Training Loop")
     print(f"  Model:    {MODEL_NAME}")
     print(f"  API:      {API_BASE_URL}")
     print(f"  Tasks:    {len(TRAINING_TASKS)}  x  {REPS_PER_TASK} reps each")

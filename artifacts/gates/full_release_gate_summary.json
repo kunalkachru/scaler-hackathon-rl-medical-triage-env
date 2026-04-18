@@ -1,8 +1,8 @@
 {
-  "command": "./scripts/full_release_gate.sh --base-url https://kunalkachru23-medical-triage-env-staging-latest.hf.space --repo-id kunalkachru23/medical-triage-env-staging-latest --expect-llm true",
+  "command": "./scripts/full_release_gate.sh --repo-id kunalkachru23/medical-triage-env-staging --base-url https://kunalkachru23-medical-triage-env-staging.hf.space --skip-playwright-install",
   "status": "passed",
-  "duration_sec": 82,
-  "timestamp_utc": "2026-04-14T22:37:46.646834+00:00",
-  "base_url": "https://kunalkachru23-medical-triage-env-staging-latest.hf.space",
-  "repo_id": "kunalkachru23/medical-triage-env-staging-latest"
+  "duration_sec": 146,
+  "timestamp_utc": "2026-04-18T01:06:50.618587+00:00",
+  "base_url": "https://kunalkachru23-medical-triage-env-staging.hf.space",
+  "repo_id": "kunalkachru23/medical-triage-env-staging"
 }

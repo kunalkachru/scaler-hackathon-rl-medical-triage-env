@@ -23,7 +23,7 @@ import requests
 
 PRIORITIES      = ["low", "medium", "high", "critical"]
 VITAL_SIGNS     = ["respiratory_rate", "heart_rate", "spo2", "systolic_bp", "temperature", "consciousness"]
-ACTIONS_DT      = ["monitor", "escalate", "emergency_response", "comfort_care"]
+ACTIONS_DT      = ["monitor", "escalate", "emergency_response"]
 BUNDLE_ELEMENTS = ["blood_cultures", "iv_antibiotics", "iv_fluids", "lactate", "vasopressors"]
 ANTIBIOTICS     = ["piperacillin_tazobactam", "meropenem", "ceftriaxone", "co-amoxiclav", "levofloxacin"]
 AGE_GROUPS      = ["infant", "toddler", "preschool", "school_age", "adolescent"]
